@@ -562,6 +562,10 @@ Bug fixes from the first days of 0.5.0, a Safari extension, and more file types.
 
 These ship in the next version.
 
+- ✅ YouTube: a video the browser's button sends with the page's cookies, refused with 403 or the
+  bot check as a signed-in viewer's, is looked up once more without them, as a private window
+  gets it; private, members' and age-restricted videos keep them
+  ([#686](https://github.com/anefzaoui/misterdownloadmanager/issues/686))
 - ✅ **Download File Info**: **...** beside **Save As** opens the system's Save dialog (the
   folder and the file name, the download's type listed), and the name typed there is the one
   saved ([#1088](https://github.com/anefzaoui/misterdownloadmanager/issues/1088))
