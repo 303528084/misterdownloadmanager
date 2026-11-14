@@ -562,6 +562,9 @@ Bug fixes from the first days of 0.5.0, a Safari extension, and more file types.
 
 These ship in the next version.
 
+- ✅ Chromium browsers: a video (or a PDF, an MP3) the browser would play, taken by MDM, keeps
+  the name its server gives it instead of its address's (`main.mkv`)
+  ([#948](https://github.com/anefzaoui/misterdownloadmanager/issues/948))
 - ✅ A download refused for its site's security certificate says why (expired, not trusted, for
   another name) instead of a bare **Error** (follows [#762](https://github.com/anefzaoui/misterdownloadmanager/issues/762))
 - ✅ **Options → Downloads → Customize "Download progress" dialog → Edit...** works: it can turn
