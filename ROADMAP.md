@@ -572,6 +572,9 @@ These ship in the next version.
 - ✅ **Download File Info**: **...** beside **Save As** opens the system's Save dialog (the
   folder and the file name, the download's type listed), and the name typed there is the one
   saved ([#1088](https://github.com/anefzaoui/misterdownloadmanager/issues/1088))
+- ✅ The browser's **Download all links** on a page with thousands of long links: the list goes to
+  MDM in parts the browser lets through, and opens in Link grabber whole, as one list; past 1 MB of
+  links nothing arrived
 - ✅ Browser integration: a copy run from inside a zip (a temporary folder) no longer sets it up
   for itself and leaves the browsers looking for a copy that is gone; MDM takes back a
   registration that leads nowhere at each start, never one that works, and Test browser
