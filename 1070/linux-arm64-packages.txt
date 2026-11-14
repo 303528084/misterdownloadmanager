@@ -1,0 +1,13 @@
+sha256 OK  MisterDownloadManager-0.5.2-linux-arm64.AppImage
+sha256 OK  MisterDownloadManager-0.5.2-linux-arm64.AppImage.zsync
+sha256 OK  MisterDownloadManager-0.5.2-linux-arm64.deb
+sha256 OK  MisterDownloadManager-0.5.2-linux-arm64.rpm
+sha256 OK  MisterDownloadManager-0.5.2-linux-arm64.tar.gz
+MisterDownloadManager-0.5.2-linux-arm64.AppImage runtime aarch64
+MisterDownloadManager-0.5.2-linux-arm64.AppImage update info gh-releases-zsync|anefzaoui|misterdownloadmanager|latest|MisterDownloadManager-*-linux-arm64*.AppImage.zsync
+control.tar.zst: not read
+MisterDownloadManager-0.5.2-linux-arm64.rpm lead arch number 0 name misterdownloadmanager-0.5.2-1
+MisterDownloadManager-0.5.2-linux-arm64.tar.gz MisterDownloadManager-0.5.2-linux-arm64/misterdownloadmanager-nmhost aarch64
+MisterDownloadManager-0.5.2-linux-arm64.tar.gz MisterDownloadManager-0.5.2-linux-arm64/misterdownloadmanager aarch64
+MisterDownloadManager-0.5.2-linux-arm64.tar.gz MisterDownloadManager-0.5.2-linux-arm64/misterdownloadmanager-cli aarch64
+MisterDownloadManager-0.5.2-linux-arm64.tar.gz MisterDownloadManager-0.5.2-linux-arm64/misterdownloadmanager-mcp aarch64

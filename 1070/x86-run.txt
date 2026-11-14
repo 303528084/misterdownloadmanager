@@ -1,0 +1,22 @@
+﻿14:42:29 misterdownloadmanager.exe: PE machine 0x014C (x86, 32-bit)
+14:42:31 run en-light
+14:42:36   started: pid 23260, 94 MB
+14:42:36   added http://127.0.0.1:8421/gen/32M/x86-test.bin?seed=696
+14:42:36   finished: 33554432 bytes, SHA-256 dc3b485acf7faa9c0eb7eca05d48f8d76311c37d7fe5b057ce13d9164161d028
+14:42:42   shot x86-after-download.png
+14:42:43   the list: 1 item(s)
+14:42:47   shot x86-helpers-en-light.png
+14:42:47   quit with /exit: no process left
+14:42:47 run en-dark
+14:42:50   started: pid 30160, 90 MB
+14:42:54   shot x86-helpers-en-dark.png
+14:42:55   quit with /exit: no process left
+14:42:55 run de-light
+14:42:58   started: pid 25724, 94 MB
+14:43:02   shot x86-helpers-de-light.png
+14:43:03   quit with /exit: no process left
+14:43:03 run ar-light
+14:43:06   started: pid 30356, 95 MB
+14:43:10   shot x86-helpers-ar-light.png
+14:43:10   quit with /exit: no process left
+14:43:11 lab server stopped
