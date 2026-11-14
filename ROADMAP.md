@@ -591,6 +591,10 @@ These ship in the next version.
 - ✅ Windows with Direct3D 12: the progress window no longer flashes a stretched picture when
   Show details or Hide details changes its size
   ([#471](https://github.com/anefzaoui/misterdownloadmanager/issues/471))
+- ✅ Videos looked up about a second sooner on Windows (yt-dlp's folder build, which doesn't unpack
+  itself at every start), and the video button's look-up starts once the pointer rests on it;
+  in a private window only on the click (for
+  [#1053](https://github.com/anefzaoui/misterdownloadmanager/issues/1053))
 - ✅ Extracting archives: the size limit covers every entry, also the ones left out, and
   cancelling stops there too
   (part of [#37](https://github.com/anefzaoui/misterdownloadmanager/issues/37))
@@ -1074,6 +1078,8 @@ These ship in a later version, when they're ready.
 
 ### Bugs being looked into
 
+- 🔍 A look-up that waits 20 s on a video server the network doesn't answer
+  ([#1053](https://github.com/anefzaoui/misterdownloadmanager/issues/1053))
 - 🔍 The main window's own looks at the disk on a drive slow to answer: starting or resuming a
   download that was already under way, a rename or move when one finishes, and links added
   without Download File Info still wait for it (follows
