@@ -562,6 +562,8 @@ Bug fixes from the first days of 0.5.0, a Safari extension, and more file types.
 
 These ship in the next version.
 
+- ✅ **Refresh download address** opens the page the download was started from, not the site's
+  home page ([#607](https://github.com/anefzaoui/misterdownloadmanager/issues/607))
 - ✅ A video's look-up no longer waits 20 s on a server the network drops: 5 s, and once more
   with yt-dlp's own wait only when the look-up failed for a slow server
   ([#1053](https://github.com/anefzaoui/misterdownloadmanager/issues/1053))
