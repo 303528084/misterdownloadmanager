@@ -126,6 +126,12 @@ pub fn keep_theme(
     let shown_key = key.with("shown");
     let front_key = key.with("front");
     let caption_key = key.with("caption");
+    let opener_key = key.with("opener");
+    // Closing (its last pass, the window still there): the front goes back to the window it was
+    // opened from (#1080).
+    if !open && ctx.data(|d| d.get_temp::<bool>(shown_key)) == Some(true) {
+        hand_back(title, ctx.data(|d| d.get_temp::<isize>(opener_key)));
+    }
     // Not drawn in the last pass, the window is gone and this is a new one, hidden until it is
     // told otherwise, whatever the last one was told (#440).
     if !open || window_was_gone(ctx, key.with("theme-pass")) {
@@ -134,12 +140,21 @@ pub fn keep_theme(
             d.remove::<bool>(shown_key);
             d.remove::<u32>(front_key);
             d.remove::<bool>(caption_key);
+            d.remove::<isize>(opener_key);
         });
     }
     if !open {
         return;
     }
     let sent = ctx.data(|d| d.get_temp::<bool>(theme_key));
+    // A new window, still hidden: the window in front is the one it is opened from, when it is
+    // MDM's (the click or key there that opened it).
+    #[cfg(windows)]
+    if sent.is_none()
+        && let Some(h) = crate::win32::own_foreground()
+    {
+        ctx.data_mut(|d| d.insert_temp(opener_key, h));
+    }
     if sent != Some(dark) {
         ctx.send_viewport_cmd_to(
             vid,
@@ -195,6 +210,39 @@ pub fn keep_theme(
     }
     #[cfg(not(windows))]
     let _ = (title, caption_key);
+}
+
+/// Window `title` closing (#1080): while it is in front, the front goes back to the window it was
+/// opened from (`opener`), so closing a dialog never leaves another program in front of MDM.
+fn hand_back(title: &str, opener: Option<isize>) {
+    // Off-screen test runs never take the front (main.rs `offscreen`).
+    #[cfg(windows)]
+    if !crate::offscreen() {
+        crate::win32::hand_back(title, opener);
+    }
+    // Elsewhere the window manager gives the focus back to the window used before the one that
+    // closed, from its focus history (checked with GNOME on X11), and an app can't take the focus
+    // itself on Wayland.
+    #[cfg(not(windows))]
+    let _ = (title, opener);
+}
+
+/// Where the front goes as a dialog closes ([`hand_back`], #1080): nowhere unless the dialog is
+/// in front (the user went elsewhere meanwhile: that stays in front) and was opened from one of
+/// MDM's windows (opened from the browser, it leaves the browser's front alone); then the window
+/// it was opened from, or the main window when that one can't take it any more (closed, hidden,
+/// minimized, disabled). Each window comes with whether it can take the front.
+#[cfg(any(windows, test))]
+pub(crate) fn front_after_close<W>(
+    in_front: bool,
+    opener: Option<(W, bool)>,
+    main: Option<(W, bool)>,
+) -> Option<W> {
+    let (opener, usable) = opener.filter(|_| in_front)?;
+    if usable {
+        return Some(opener);
+    }
+    main.and_then(|(main, usable)| usable.then_some(main))
 }
 
 /// Whether the window `key` is drawn again after a pass that didn't draw it: egui destroys a
@@ -3967,6 +4015,43 @@ fn ensure_folder_with<T>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// #1080: a dialog closing in front gives the front back to the window it was opened from,
+    /// or to the main window when that one can't take it; never when the user went elsewhere,
+    /// nor for a dialog another program opened.
+    #[test]
+    fn a_closing_dialog_gives_the_front_back_to_its_opener() {
+        const MAIN: u8 = 1;
+        const OPTIONS: u8 = 2;
+        // Opened from the main window, closed in front: back to the main window.
+        assert_eq!(
+            front_after_close(true, Some((MAIN, true)), Some((MAIN, true))),
+            Some(MAIN)
+        );
+        // Opened from Options: back to Options.
+        assert_eq!(
+            front_after_close(true, Some((OPTIONS, true)), Some((MAIN, true))),
+            Some(OPTIONS)
+        );
+        // Options closed meanwhile (or a menu that opened it): the main window.
+        assert_eq!(
+            front_after_close(true, Some((OPTIONS, false)), Some((MAIN, true))),
+            Some(MAIN)
+        );
+        // Nothing of MDM's can take it (the main window minimized or hidden): left to the system.
+        assert_eq!(
+            front_after_close(true, Some((MAIN, false)), Some((MAIN, false))),
+            None
+        );
+        assert_eq!(front_after_close(true, Some((OPTIONS, false)), None), None);
+        // The user is in another program now: it stays in front.
+        assert_eq!(
+            front_after_close(false, Some((MAIN, true)), Some((MAIN, true))),
+            None
+        );
+        // Opened while another program was in front (the browser's download): left alone.
+        assert_eq!(front_after_close(true, None, Some((MAIN, true))), None);
+    }
 
     /// #440: Download File Info behind the Create folder question ended without a closing pass,
     /// and the next one opened as a new, hidden window that was never told to show: later

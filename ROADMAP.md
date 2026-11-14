@@ -562,6 +562,9 @@ Bug fixes from the first days of 0.5.0, a Safari extension, and more file types.
 
 These ship in the next version.
 
+- ✅ Windows: closing a dialog keeps MDM in front; it no longer goes behind the browser after
+  File Properties' Open and OK
+  ([#1080](https://github.com/anefzaoui/misterdownloadmanager/issues/1080))
 - ✅ The sites in **Don't start downloading automatically from the following sites** take their
   subdomains and the files their pages link to on another server (a CDN), as the Download panels'
   list does

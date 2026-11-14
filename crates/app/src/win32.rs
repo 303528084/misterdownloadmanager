@@ -331,6 +331,58 @@ unsafe fn above_others(hwnd: HWND) {
     }
 }
 
+/// The window in front, when it is one of this process's: what a dialog about to be shown is
+/// opened from ([`hand_back`], #1080).
+pub fn own_foreground() -> Option<isize> {
+    use windows_sys::Win32::UI::WindowsAndMessaging::GetForegroundWindow;
+    // SAFETY: plain queries.
+    unsafe {
+        let fg = GetForegroundWindow();
+        let mut pid = 0u32;
+        if fg.is_null() || GetWindowThreadProcessId(fg, &mut pid) == 0 {
+            return None;
+        }
+        (pid == GetCurrentProcessId()).then_some(fg as isize)
+    }
+}
+
+/// Our window titled `title`, about to close (dialogs::keep_theme): while it is the foreground
+/// window, the window it was opened from (`opener`, [`own_foreground`] before it was shown) is
+/// made the foreground window first, or the main window when that one is gone, hidden or
+/// minimized (`dialogs::front_after_close`). Left to itself, Windows activates the next window in
+/// the z-order when the active one goes, not necessarily its owner (#1080).
+pub fn hand_back(title: &str, opener: Option<isize>) {
+    use windows_sys::Win32::UI::Input::KeyboardAndMouse::IsWindowEnabled;
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        GetForegroundWindow, IsIconic, IsWindow, IsWindowVisible, SetForegroundWindow,
+    };
+    let Some(dialog) = find_own_window(title) else {
+        return;
+    };
+    // SAFETY: plain queries; any value is accepted as the handle.
+    let usable = |h: HWND| unsafe {
+        h != dialog
+            && IsWindow(h) != 0
+            && IsWindowVisible(h) != 0
+            && IsIconic(h) == 0
+            && IsWindowEnabled(h) != 0
+    };
+    // SAFETY: a plain query.
+    let in_front = unsafe { GetForegroundWindow() } == dialog;
+    let main = find_own_window(crate::MAIN_TITLE);
+    let to = crate::dialogs::front_after_close(
+        in_front,
+        opener.map(|h| (h, usable(h as HWND))),
+        main.map(|h| (h as isize, usable(h))),
+    );
+    if let Some(h) = to {
+        tracing::info!("window {title:?} closing in front: the front goes back to its opener");
+        // SAFETY: a window of this process; ours is the foreground window, so Windows lets it
+        // give the foreground away.
+        unsafe { SetForegroundWindow(h as HWND) };
+    }
+}
+
 /// Give our window titled `title` IDM's modal-dialog frame (WS_EX_DLGMODALFRAME, no sizing
 /// frame: 3 px borders, 26 px caption) and resize it so the client stays `client` points, at
 /// `scale` pixels per point (the display's scaling times any zoom), with the frame measured for
