@@ -562,6 +562,9 @@ Bug fixes from the first days of 0.5.0, a Safari extension, and more file types.
 
 These ship in the next version.
 
+- ✅ MediaFire: a download resumed after its address expired asks the file's MediaFire page for a
+  fresh one and goes on; a MediaFire file page's link downloads the file
+  ([#952](https://github.com/anefzaoui/misterdownloadmanager/issues/952))
 - ✅ Chromium browsers: a video (or a PDF, an MP3) the browser would play, taken by MDM, keeps
   the name its server gives it instead of its address's (`main.mkv`)
   ([#948](https://github.com/anefzaoui/misterdownloadmanager/issues/948))
