@@ -562,6 +562,12 @@ Bug fixes from the first days of 0.5.0, a Safari extension, and more file types.
 
 These ship in the next version.
 
+- ✅ Tests: the ones that failed now and then on a busy runner (keeping the computer awake, a
+  program or a call to the system that hangs, a stream's time for both its requests, a helper's
+  children ending with it, the clipboard used from many threads at once) check what they guard
+  by the order things happen in, not by the runner's speed: a fake system that answers when the
+  test says, a program that ends when the test lets it, a count of the work done instead of a
+  fixed time
 - ✅ The Download video button over a video in a feed, or on a site yt-dlp can't read (Douyin):
   when MDM finds nothing on the page, it offers what the tab played for that video, told apart
   from the feed's next one by its length, and says so when it can't tell
