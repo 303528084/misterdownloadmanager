@@ -562,6 +562,9 @@ Bug fixes from the first days of 0.5.0, a Safari extension, and more file types.
 
 These ship in the next version.
 
+- ✅ The window opens at once when an unfinished download is on a network share that doesn't
+  answer or a sleeping drive: downloads' progress, and a new video's name, are read beside it
+  (found with [#1170](https://github.com/anefzaoui/misterdownloadmanager/issues/1170))
 - ✅ macOS: MDM no longer closes when the displays change while it draws with OpenGL (a dock
   and the lid closed): it takes its OpenGL context back when the system left its thread without
   it, and a texture OpenGL still refuses is made on a later frame
