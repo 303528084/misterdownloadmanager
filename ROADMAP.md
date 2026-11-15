@@ -562,6 +562,10 @@ Bug fixes from the first days of 0.5.0, a Safari extension, and more file types.
 
 These ship in the next version.
 
+- ✅ Windows: shutting down, restarting or signing out saves MDM as File → Exit does (its
+  downloads stop where they are and resume there, no crash report at the next start), and an
+  installer closing MDM through the Restart Manager closes it; File → Exit also stops the
+  downloads where they are
 - ✅ No more **The window stopped responding** report in the first minutes after MDM starts with
   the computer: as after a wake, a stall then is the computer's (logged, and reported only if it
   lasts past the first three minutes)
