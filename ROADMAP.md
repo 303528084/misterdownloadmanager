@@ -1108,6 +1108,11 @@ These ship in the next version.
 - ✅ Linux: downloads to an NTFS drive (`ntfs3`) start at once instead of filling the file with
   zeros first, which held the download at 0% and slowed the whole computer
 - ✅ Linux on Wayland (XWayland) with NVIDIA's driver: typing and clicking no longer lag by 1 to 2
+  seconds; MDM spaces its frames itself instead of waiting for the screen's refresh
+- ✅ Linux on X11 and XWayland with Mesa's drivers (Intel, AMD, llvmpipe): one window at most waits
+  for the screen's refresh, none under XWayland, as `vblank_mode=0` did for the lag when moving the
+  main window and clicking in the download dialog (for
+  [#347](https://github.com/anefzaoui/misterdownloadmanager/issues/347), waiting for the reporter)
   seconds; MDM spaces its frames itself instead of waiting for the screen's refresh (other drivers
   keep the refresh)
 - ✅ The computer stays awake while anything downloads, not only during a queue that woke it, and
