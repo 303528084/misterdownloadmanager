@@ -562,6 +562,9 @@ Bug fixes from the first days of 0.5.0, a Safari extension, and more file types.
 
 These ship in the next version.
 
+- ✅ A queue (or a download) set to **Exit Mister Download Manager when done** quits MDM, as File →
+  Exit does, with **Keep running when closing the window** on; it only hid MDM in the notification
+  area
 - ✅ Windows and macOS: names in any script a font on the computer has show their letters, whatever
   the interface language: the system's own font for the scripts MDM lists none for
   ([#1125](https://github.com/anefzaoui/misterdownloadmanager/issues/1125))
