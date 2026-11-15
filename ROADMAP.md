@@ -562,6 +562,8 @@ Bug fixes from the first days of 0.5.0, a Safari extension, and more file types.
 
 These ship in the next version.
 
+- ✅ **Stop All** stops the queues too: a running queue no longer starts its next download
+  ([#1164](https://github.com/anefzaoui/misterdownloadmanager/issues/1164))
 - ✅ macOS: closing the window leaves MDM running in the Dock, and a click on its icon there brings
   the window back, menu bar icon or not; Cmd+Q quits
 - ✅ Windows: shutting down, restarting or signing out saves MDM as File → Exit does (its
