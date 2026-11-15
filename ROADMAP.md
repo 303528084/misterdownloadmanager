@@ -585,6 +585,7 @@ These ship in the next version.
   completion happens beside the window (for [#1103](https://github.com/anefzaoui/misterdownloadmanager/issues/1103))
 - ✅ A crash while checking for updates on some computers; a check that goes wrong says why
   ([#1123](https://github.com/anefzaoui/misterdownloadmanager/issues/1123))
+- ✅ Torrents: trackers at addresses that can't be on the internet are skipped
 - ✅ Declared videos: script text inside a script is not read as a declaration
 - ✅ Reading a page's text stops at the right closing tag
 - ✅ Torrents with a file and a folder of the same name are refused cleanly
