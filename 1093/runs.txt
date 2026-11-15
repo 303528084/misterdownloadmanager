@@ -1,0 +1,48 @@
+#1093 check: windows opened after Direct3D 12 falls back to OpenGL in the same run
+Built from main at 5032e73a6 (release), on Windows 11 x64 with an NVIDIA GeForce RTX 4060
+(OpenGL 3.3.0 NVIDIA 610.88). Each run had its own test copy: its own data folder and
+download folder, a lab server on 127.0.0.1, windows opened with /show (addurl, options,
+progress for a running 2 GB download), captured with tools/lab/cap-own.ps1 (PrintWindow).
+"drawn" = the client area has more than one colour; "capture N" = the capture it took,
+taken every 500 ms, the first 1.5 s after the window appeared.
+
+Failure paths:
+- direct3d-none: Direct3D 12 finds no adapter (MDM_RENDERER=direct3d-none, off-screen copies).
+- pipeline: Direct3D 12 starts its device, then egui's pipeline fails ("The egui renderer
+  couldn't be created: Validation Error"), as in the 32-bit build. On x64 it was forced with a
+  local, uncommitted probe (an invalid sample count for the Direct3D try only); the 32-bit build
+  fails there by itself with MDM_RENDERER=direct3d.
+
+| Build | Failure | Where | Theme | Add URL | Options | Progress |
+|---|---|---|---|---|---|---|
+| x64 | direct3d-none | off-screen | light | drawn | drawn | drawn |
+| x64 | direct3d-none | on the screen | light | drawn | drawn | drawn |
+| x64 | direct3d-none | on the screen | dark | drawn | drawn | drawn |
+| x64 | pipeline (probe) | off-screen | light | drawn | drawn | drawn |
+| x64 | pipeline (probe) | on the screen | light | drawn | drawn | drawn |
+| x64 | pipeline (probe) | off-screen | dark | drawn | drawn | drawn |
+| x64 | pipeline (probe) | on the screen | dark | drawn | drawn | drawn |
+| x86 | pipeline (real) | off-screen, 4 runs | light | drawn | drawn | drawn |
+| x86 | pipeline (real) | on the screen | light | drawn | drawn | drawn |
+| x86 | pipeline (real) | on the screen | dark | drawn | drawn | drawn |
+| x64 | none (OpenGL from the start) | off-screen | light | drawn | drawn | drawn |
+| x86 | none (OpenGL from the start) | off-screen, 4 runs | light | drawn | drawn | drawn |
+| x64 | none (Direct3D 12 default) | off-screen | light | drawn | drawn | drawn |
+
+Every window drew at the first capture, except Options once (x86, pipeline, off-screen) at the
+second, 500 ms later; OpenGL-from-the-start runs drew at the first.
+
+The 32-bit build's log (on the screen, light):
+  drawing with Direct3D 12
+  ERROR eframe::native::run: Exiting because of error: WGPU error: The egui renderer couldn't be created: Validation Error
+  WARN  renderer: Direct3D 12 didn't start: WGPU error: The egui renderer couldn't be created: Validation Error
+  drawing with OpenGL
+  drawing with OpenGL on NVIDIA GeForce RTX 4060/PCIe/SSE2 (3.3.0 NVIDIA 610.88), 698 ms after start (Direct3D 12 didn't start: ...)
+  first frame drawn, 766 ms after start
+
+The x64 direct3d-none log:
+  drawing with Direct3D 12
+  WARN  renderer: Direct3D 12 didn't start: WGPU error: Adapter selection failed: no (none wanted) Direct3D 12 adapter among [Direct3D 12 on NVIDIA GeForce RTX 4060 (...); Direct3D 12 on Microsoft Basic Render Driver (...) [software]]
+  drawing with OpenGL
+  drawing with OpenGL on NVIDIA GeForce RTX 4060/PCIe/SSE2 (3.3.0 NVIDIA 610.88), 980 ms after start (...)
+  first frame drawn, 1043 ms after start
