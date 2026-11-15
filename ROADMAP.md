@@ -585,6 +585,8 @@ These ship in the next version.
   completion happens beside the window (for [#1103](https://github.com/anefzaoui/misterdownloadmanager/issues/1103))
 - ✅ A crash while checking for updates on some computers; a check that goes wrong says why
   ([#1123](https://github.com/anefzaoui/misterdownloadmanager/issues/1123))
+- ✅ An excluded site is the same site written with the root's dot (`example.com.`), in the app
+  and the extension
 - ✅ Proxy auto-config follows the address a script was given, and an https address's path stays
   out of the script
 - ✅ Tests: the programs tests write and then run (the extraction tests' stand-in for HatchZip,
