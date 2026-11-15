@@ -562,6 +562,10 @@ Bug fixes from the first days of 0.5.0, a Safari extension, and more file types.
 
 These ship in the next version.
 
+- ✅ No more **The window stopped responding** report in the first minutes after MDM starts with
+  the computer: as after a wake, a stall then is the computer's (logged, and reported only if it
+  lasts past the first three minutes)
+  (for [#1126](https://github.com/anefzaoui/misterdownloadmanager/issues/1126))
 - ✅ A malformed stream playlist no longer stops the video downloader: that download fails and
   says why ([#1141](https://github.com/anefzaoui/misterdownloadmanager/issues/1141))
 - ✅ A queue (or a download) set to **Exit Mister Download Manager when done** quits MDM, as File →
