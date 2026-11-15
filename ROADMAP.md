@@ -562,6 +562,9 @@ Bug fixes from the first days of 0.5.0, a Safari extension, and more file types.
 
 These ship in the next version.
 
+- ✅ No freeze when a video or a gallery finishes on a slow or busy disk: its files are marked as
+  downloaded from the internet by the download itself, before it's done, and a rename on
+  completion happens beside the window (for [#1103](https://github.com/anefzaoui/misterdownloadmanager/issues/1103))
 - ✅ A crash while checking for updates on some computers; a check that goes wrong says why
   ([#1123](https://github.com/anefzaoui/misterdownloadmanager/issues/1123))
 - ✅ Tests: the programs tests write and then run (the extraction tests' stand-in for HatchZip,
