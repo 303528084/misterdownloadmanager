@@ -4053,21 +4053,32 @@ impl App {
         // No answer from the shell is not such a "no" (#750, `tray::on_close`). Everywhere else
         // closing closes, as any window's does: Options' "Keep running when closing the window"
         // off, no tray at all, or Linux with no tray host (#59: a hidden window couldn't come
-        // back, and one that merely minimized could never be closed).
-        // Asked to quit (`quit`: File → Exit, Exit when done…), the close quits whatever the option.
+        // back, and one that merely minimized could never be closed). macOS (#1125): the window
+        // closes into the Dock, as Mac apps' do, and a click on MDM's icon there brings it back.
+        // Asked to quit (`quit`: File → Exit, Cmd+Q, MDM → Quit, Exit when done…), the close quits
+        // whatever the option.
         if ctx.input(|i| i.viewport().close_requested()) {
             use crate::tray::OnClose;
             let quitting = self.exiting;
             let keep = self.settings.close_to_tray;
             let tray = self.tray.is_some();
+            #[cfg(target_os = "macos")]
+            let dock = crate::unix::open_events::dock_reopens();
+            #[cfg(not(target_os = "macos"))]
+            let dock = false;
             // The shell's answer, only when it matters (macOS: asked afresh).
-            let icon = if keep && tray && !quitting {
+            let icon = if keep && tray && !quitting && !dock {
                 self.tray_icon_now()
             } else {
                 crate::tray::Icon::Gone
             };
             let taskbar = cfg!(not(target_os = "linux"));
-            match crate::tray::on_close(quitting, keep, tray, icon, taskbar) {
+            match crate::tray::on_close(quitting, keep, tray, icon, taskbar, dock) {
+                OnClose::Hide if dock => {
+                    tracing::info!("close: hidden; MDM's icon in the Dock brings it back");
+                    ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+                    self.hide_to_tray(ctx);
+                }
                 OnClose::Hide => {
                     tracing::info!("close: hidden to the notification area (tray icon: {icon:?})");
                     ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
@@ -11329,7 +11340,17 @@ impl App {
 impl Drop for App {
     /// Exit, a closed window that quits, a headless run's end: [`App::finish`].
     fn drop(&mut self) {
+        // macOS ends the program right after this when it quits MDM itself (Cmd+Q, MDM → Quit,
+        // the Dock's Quit, logging out): eframe drops the app on the way, and `main` never
+        // gets its turn to say the exit was clean (#1125).
+        #[cfg(target_os = "macos")]
+        let by_the_system = !self.exiting;
         self.finish(None);
+        #[cfg(target_os = "macos")]
+        if by_the_system {
+            tracing::info!("quit by macOS (Cmd+Q, the menu's or the Dock's Quit, logging out)");
+            crate::crash::clean_exit();
+        }
     }
 }
 
