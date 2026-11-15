@@ -562,6 +562,9 @@ Bug fixes from the first days of 0.5.0, a Safari extension, and more file types.
 
 These ship in the next version.
 
+- ✅ Bangla: a menu or button's shortcut is its letter in brackets — "ফাইল(&F)", "থামান(&T)" —
+  not "&" on a Bangla letter no key can press (thanks to
+  [@Seyamalam](https://github.com/Seyamalam))
 - ✅ The browser extension's window and Test browser integration read the browsers' folders
   beside the window, so a slow folder can't freeze it; macOS: a browser's folder macOS keeps MDM
   out of is said, with the setting that allows it
