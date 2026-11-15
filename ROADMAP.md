@@ -562,6 +562,10 @@ Bug fixes from the first days of 0.5.0, a Safari extension, and more file types.
 
 These ship in the next version.
 
+- ✅ The window no longer waits for its crash monitor at start: the connection is made beside it,
+  a monitor slow to listen is connected to late, with what was sent meanwhile told again, and one
+  the system refuses for a while no longer ends the session's crash reports
+  ([#476](https://github.com/anefzaoui/misterdownloadmanager/issues/476))
 - ✅ **Stop All** stops the queues too: a running queue no longer starts its next download
   ([#1164](https://github.com/anefzaoui/misterdownloadmanager/issues/1164))
 - ✅ macOS: closing the window leaves MDM running in the Dock, and a click on its icon there brings
