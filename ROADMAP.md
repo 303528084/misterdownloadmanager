@@ -562,6 +562,9 @@ Bug fixes from the first days of 0.5.0, a Safari extension, and more file types.
 
 These ship in the next version.
 
+- ✅ **Options → General → Download panels → Edit... → Button size**: **Full**, as before, or
+  **Compact**, the round Download video button (the logo, the arrow and ✕) over every video
+  ([#1278](https://github.com/anefzaoui/misterdownloadmanager/issues/1278))
 - ✅ The extension's checks also pass from a Windows checkout with Git for Windows' defaults
   (`core.autocrlf=true`): the tree keeps LF everywhere except batch files, and the tests read
   sources, JSON and the catalogs by lines, so the 103 checks pass with either line ending
