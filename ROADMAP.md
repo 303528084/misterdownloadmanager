@@ -562,6 +562,10 @@ Bug fixes from the first days of 0.5.0, a Safari extension, and more file types.
 
 These ship in the next version.
 
+- ✅ With **Start immediately** on, picking the folder the early download already saves to in
+  **Save As** keeps its name: the download's own `.mdm.part` and `.mdm.json` no longer count as
+  taken, so it isn't offered as `song (1).mp3` and doesn't start over
+  ([#597](https://github.com/anefzaoui/misterdownloadmanager/issues/597))
 - ✅ The crash crate's tests build on 32-bit Windows again: the alternate-stack test uses a
   top a 32-bit `usize` can hold, with that crash's own address kept in its comment, so CI's
   `windows-x86` job is green again
