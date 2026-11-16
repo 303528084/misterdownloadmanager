@@ -562,6 +562,9 @@ Bug fixes from the first days of 0.5.0, a Safari extension, and more file types.
 
 These ship in the next version.
 
+- ✅ A crawling connection at a download's end is replaced again after the disk set the pace, instead
+  of holding a last piece for a minute; the shared-line slow-connection test no longer fails on a busy
+  CI runner
 - ✅ **View → Draw with**'s note on when a graphics system is tried again reads the time zone
   the way the rest of the window does, never waiting for Windows
 - ✅ Every release file gets a signed build provenance record (`gh attestation verify`), and the
