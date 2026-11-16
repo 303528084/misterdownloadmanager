@@ -620,6 +620,8 @@ These ship in the next version.
   ([#1157](https://github.com/anefzaoui/misterdownloadmanager/issues/1157))
 - ✅ No freeze when downloads are deleted with their files: the rows go at once and the files are
   deleted beside the window ([#1170](https://github.com/anefzaoui/misterdownloadmanager/issues/1170))
+- ✅ No freeze when a torrent is deleted on a slow disk: its kept `.torrent` and renamed file's
+  record go beside the window, in order with adding the same torrent again
 - ✅ No freeze when a download starts over at its own place on a slow disk (Redownload, a
   duplicate overwritten, a restart under the same name): the old files go beside the window and
   the new start waits for them on its own; a finished duplicate's file is looked at beside it too
