@@ -564,6 +564,9 @@ Bug fixes from the first days of 0.5.0, a Safari extension, and more file types.
 
 These ship in the next version.
 
+- ✅ The tests run in English whatever Windows' display language is: a Chinese, German or
+  Arabic Windows ran 27 of `mdm-app`'s tests red on code CI's English runner passed, as the
+  interface language followed the system in tests too
 - ✅ **Alt** and a button's underlined letter press the button (the **Scheduler**'s **Apply**,
   **Close** and the others pressed nothing), letters of other scripts too, and **Alt** in such a
   window underlines the letters in every look, as in the main window
