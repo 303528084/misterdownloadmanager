@@ -1310,6 +1310,10 @@ These ship in the next version.
 - ✅ A menu's underlined letter runs its item without typing that letter into the text box under
   the menu, the arrows move in the menu only, and Alt with a dialog's letter types nothing either;
   letters of other scripts (Arabic, Russian) choose their menu item
+- ✅ The command line's `video-get` takes the best quality as the Download video window does (a
+  Bilibili video, whose pictures and sounds come apart, failed), `--quality` takes a height or the
+  nearest below it, and an error with no format to download lists the ones the page offers
+  ([#1240](https://github.com/anefzaoui/misterdownloadmanager/issues/1240))
 - ✅ Create new queue (the Categories tree's menu, Add to queue) shows its name box in front of the
   Scheduler, and proposes a name no queue has
   ([#1237](https://github.com/anefzaoui/misterdownloadmanager/issues/1237))
