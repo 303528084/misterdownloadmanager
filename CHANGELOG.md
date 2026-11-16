@@ -7,6 +7,7 @@ Each release's notes on GitHub come from its section here (`## [X.Y.Z]`, see
 
 ### Added
 
+- **Command-line `add` command:** `misterdownloadmanager-cli add <url>` can now add downloads to the running app, supporting `-o` (output folder), `-f` (file name), `-c` (category), `-q` (queue), `-l` (later / queue only), and `-s` (silent).
 - **MCP queue selection and category support:** `start_queue` and `stop_queue` in the MCP server can now target a specific download queue by name (`queue`), or default to the main queue when omitted. `add_download` also supports optional `queue` (for queuing into a specific queue) and `category` (to route downloads by category key).
 - **Button size for the Download video button:** **Options → General → Customize MDM Download panels in browsers → Edit...** has **Button size**: **Full** (as installed: the logo, **Download video** and the quality, shrinking to the round button only on a small video or where its words wouldn't fit) or **Compact**, the round button (MDM's logo, the arrow for its list and **✕**) over every video, whatever its size. After a click it still says what happened in words. A change reaches pages already open within a few seconds, without reloading them ([#1278](https://github.com/anefzaoui/misterdownloadmanager/issues/1278)).
 - **Command-line queue control (`start-queue`, `stop-queue`):** `misterdownloadmanager-cli` can now start or stop download queues in the running app via `start-queue` and `stop-queue` (automation API). Omitting the queue name starts or stops the main download queue.
