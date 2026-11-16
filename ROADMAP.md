@@ -1306,6 +1306,9 @@ These ship in the next version.
 - ✅ A menu's underlined letter runs its item without typing that letter into the text box under
   the menu, the arrows move in the menu only, and Alt with a dialog's letter types nothing either;
   letters of other scripts (Arabic, Russian) choose their menu item
+- ✅ Create new queue (the Categories tree's menu, Add to queue) shows its name box in front of the
+  Scheduler, and proposes a name no queue has
+  ([#1237](https://github.com/anefzaoui/misterdownloadmanager/issues/1237))
 - ✅ Torrents: peers at addresses that can't be on the internet are left alone, whoever names
   them (a tracker, the DHT, another peer), as trackers there already were
 
