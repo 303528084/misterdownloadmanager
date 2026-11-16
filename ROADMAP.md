@@ -562,6 +562,9 @@ Bug fixes from the first days of 0.5.0, a Safari extension, and more file types.
 
 These ship in the next version.
 
+- ✅ Linux: a crash is reported on computers whose processor doesn't offer XSAVE (an older
+  processor, a virtual machine), where the crash handler faulted a second time and no report came
+  ([#1239](https://github.com/anefzaoui/misterdownloadmanager/issues/1239))
 - ✅ A crawling connection at a download's end is replaced again after the disk set the pace, instead
   of holding a last piece for a minute; the shared-line slow-connection test no longer fails on a busy
   CI runner
