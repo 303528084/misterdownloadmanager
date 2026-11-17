@@ -137,13 +137,18 @@ impl Install {
         let Some(arch) = arch else {
             return Vec::new();
         };
-        if windows_7 {
+        // Windows 7's own names for Windows' three kinds (the other kinds are other systems',
+        // which a Windows 7 build never is).
+        let windows_kind = matches!(
+            self,
+            Install::Installer | Install::PortableZip | Install::PlainZip
+        );
+        if windows_7 && windows_kind {
             let tail = match (self, arch) {
                 (_, Arch::Arm64) => return Vec::new(),
                 (Install::Installer, _) => format!("setup-win7-{}.exe", arch.name()),
                 (Install::PortableZip, _) => format!("portable-win7-{}.zip", arch.name()),
-                (Install::PlainZip, _) => format!("win7-{}.zip", arch.name()),
-                _ => return Vec::new(),
+                _ => format!("win7-{}.zip", arch.name()),
             };
             return vec![format!("MisterDownloadManager-{version}-{tail}")];
         }
@@ -596,10 +601,22 @@ Connection: close
         // Each kind, processor and Windows (7, or 10 and later) has a name of its own: no copy
         // takes another's file, so a Windows 7 copy never updates to a file that doesn't start
         // there, nor a Windows 10 copy to Windows 7's.
+        let windows = |i: Install| {
+            matches!(
+                i,
+                Install::Installer | Install::PortableZip | Install::PlainZip
+            )
+        };
         let mut seen = std::collections::HashMap::new();
         for arch in [Arch::X64, Arch::Arm64, Arch::X86] {
             for install in Install::ALL {
-                for win7 in [false, true] {
+                // Windows 7's names are for Windows' own three kinds only.
+                let lines: &[bool] = if windows(install) {
+                    &[false, true]
+                } else {
+                    &[false]
+                };
+                for &win7 in lines {
                     for name in install.assets_of(Some(arch), win7, "1.0.0") {
                         assert_eq!(name.contains("-win7-"), win7, "{name}");
                         if let Some(other) = seen.insert(name.clone(), (install, arch, win7)) {
@@ -609,24 +626,24 @@ Connection: close
                 }
             }
         }
-        // Windows 7's build has Windows' three kinds only, for x64 and x86 only.
+        // Windows 7's build: Windows' three kinds for x64 and x86, none for ARM64; the other
+        // kinds (other systems', never a Windows 7 build's) as they are.
         for install in Install::ALL {
-            let windows = matches!(
-                install,
-                Install::Installer | Install::PortableZip | Install::PlainZip
-            );
             for arch in [Arch::X64, Arch::X86] {
-                assert_eq!(
-                    !install.assets_of(Some(arch), true, "1.0.0").is_empty(),
-                    windows,
-                    "{install:?} {arch:?}"
+                let names = install.assets_of(Some(arch), true, "1.0.0");
+                if windows(install) {
+                    assert_eq!(names.len(), 1, "{install:?} {arch:?}");
+                } else {
+                    assert_eq!(names, install.assets_on(Some(arch), "1.0.0"));
+                }
+            }
+            if windows(install) {
+                assert!(
+                    install
+                        .assets_of(Some(Arch::Arm64), true, "1.0.0")
+                        .is_empty()
                 );
             }
-            assert!(
-                install
-                    .assets_of(Some(Arch::Arm64), true, "1.0.0")
-                    .is_empty()
-            );
             assert!(install.assets_of(None, true, "1.0.0").is_empty());
         }
         // This build's own: Windows 7's files if it is Windows 7's.

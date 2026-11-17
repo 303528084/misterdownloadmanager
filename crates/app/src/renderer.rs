@@ -2951,6 +2951,9 @@ mod tests {
     /// The first frame's clock counts the API's time only: MDM's own work (making the app, its
     /// passes) is left out, so a slow start of MDM's isn't taken for Direct3D failing (#280: 10.7
     /// s from OpenGL's context to the first frame on the reporter's computer, at the 10 s limit).
+    // The clock's limit is wgpu's alone (`FIRST_FRAME_WITHIN`): not in a build without it
+    // (Windows 7's, the BSDs').
+    #[cfg(gpu)]
     #[test]
     fn the_first_frame_clock_leaves_out_mdms_own_work() {
         use std::time::{Duration, Instant};
