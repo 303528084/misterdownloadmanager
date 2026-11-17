@@ -1442,6 +1442,11 @@ These ship in the next version.
   so it never goes stale): the smaller form of
   [#1253](https://github.com/anefzaoui/misterdownloadmanager/pull/1253), whose author
   [@9M2PJU](https://github.com/9M2PJU) handed it over
+- ✅ Windows: a dialog that opens while you are in another program (the duplicate download
+  question the browser asks, Download File Info) no longer brings the main window up behind it;
+  it has its own taskbar button
+- ✅ The same video picked from the quality menu in a second tab of its page is a duplicate, even
+  when its stream's address is signed for each load (it was downloaded again without a word)
 
 ## Being worked on
 
