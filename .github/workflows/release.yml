@@ -192,12 +192,13 @@ jobs:
     # the browser-like connection. build.ps1 -Windows7 checks that Windows 7 has every function
     # its programs import (tools/win7/imports.py); GitHub has no Windows 7 runner, so the tests and
     # the smoke test run them on the runner's newer Windows. Files named "win7" and the processor
-    # (setup-win7-x64.exe...), which only Windows 7 copies update to. Unsigned: no certificate is
-    # given to this job. A failed build leaves its files out of the release, as another
-    # processor's does.
+    # (setup-win7-x64.exe...), which only Windows 7 copies update to. A failed build leaves its
+    # files out of the release, as another processor's does. Its cache holds cargo's downloads only:
+    # each target's build would push the others' caches out of the repository's 10 GB.
     name: windows7-${{ matrix.arch }}
     needs: geo
-    timeout-minutes: 120
+    # As the Windows job's.
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
@@ -229,9 +230,8 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            target
-          key: release-${{ runner.os }}-${{ matrix.target }}-cargo-${{ hashFiles('Cargo.lock', 'tools/win7/toolchain.txt') }}
-          restore-keys: release-${{ runner.os }}-${{ matrix.target }}-cargo-
+          key: release-${{ runner.os }}-win7-cargo-registry-${{ hashFiles('Cargo.lock') }}
+          restore-keys: release-${{ runner.os }}-win7-cargo-registry-
 
       # AWS-LC (rustls's) is built with NASM, as in the Windows job.
       - name: NASM
@@ -498,7 +498,9 @@ jobs:
     if: >-
       always() && startsWith(github.ref, 'refs/tags/') && needs.windows.result != 'cancelled' &&
       needs.extension.result == 'success'
-    # Windows 7's build (windows7) as another processor's: its files when it built, never waited on.
+    # Windows 7's build (windows7) as another processor's: publish waits for it to finish (or time
+    # out, 90 minutes), and its failure doesn't stop the release (always() above): its files are in
+    # the release when it built.
     needs: [windows, windows7, extension, linux, macos]
     runs-on: ubuntu-latest
     steps:
