@@ -564,6 +564,9 @@ Bug fixes from the first days of 0.5.0, a Safari extension, and more file types.
 
 These ship in the next version.
 
+- ✅ Windows: dialogs open on the main window's monitor when the monitors have different display
+  scales (a 125 % laptop and a 100 % monitor), where they opened out of sight; a window on no
+  screen is brought onto one ([#1311](https://github.com/anefzaoui/misterdownloadmanager/issues/1311))
 - ✅ Tests: more of the ones that failed now and then on a busy runner are steady. A port that
   stands for a server or a proxy that refuses is held for the whole test (one let go at once
   could be taken before the request came, and the answer found there read as "can't reach the
