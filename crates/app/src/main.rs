@@ -618,8 +618,35 @@ fn app() -> eframe::Result {
         }
         Shared(app)
     });
+    // No way of drawing started (Windows 7 with no graphics driver for OpenGL 2.1: no Direct3D 12
+    // there to fall back on, docs/windows-7.md): said in a message box, instead of an end
+    // without a word. The details are the last way's error, as the log has it.
+    #[cfg(windows)]
+    if let Err(e) = &result
+        && !renderer::drew()
+        && !offscreen()
+    {
+        let text = i18n::fmt(
+            // i18n: a message box when Mister Download Manager can't draw its windows at all (no graphics driver with OpenGL 2.1 or later, as on Windows 7 without one); {details} = the system's error, in English
+            i18n::t(
+                "Mister Download Manager can't open its windows: this computer's graphics driver has no OpenGL 2.1 or later. Install your graphics card's driver (from its maker or Windows Update), then start Mister Download Manager again.\n\n{details}",
+            ),
+            &[("details", &short(&e.to_string(), 300))],
+        );
+        win32::message_box("Mister Download Manager", &text);
+    }
     crash::clean_exit();
     result
+}
+
+/// `text`'s first `max` characters, with "…" when it is longer (an error's details for a message
+/// box: OpenGL's can list a whole pixel format).
+#[cfg(windows)]
+fn short(text: &str, max: usize) -> String {
+    match text.char_indices().nth(max) {
+        Some((at, _)) => format!("{}…", &text[..at]),
+        None => text.to_owned(),
+    }
 }
 
 /// The app as eframe runs it, shared with the window's own messages: the session's end saves
@@ -717,6 +744,15 @@ mod tests {
         assert_eq!(start_mode(true, false), Start::Minimized);
         assert_eq!(start_mode(false, true), Start::Shown);
         assert_eq!(start_mode(false, false), Start::Shown);
+    }
+
+    /// The "can't open its windows" message box's details: an error cut to its first characters.
+    #[test]
+    #[cfg(windows)]
+    fn a_long_error_is_cut_for_its_message_box() {
+        assert_eq!(super::short("abc", 3), "abc");
+        assert_eq!(super::short("abcd", 3), "abc…");
+        assert_eq!(super::short("ééé", 2), "éé…");
     }
 
     /// An off-screen run neither reads the clipboard (Add URL, Batch, the clipboard monitor…)
