@@ -264,6 +264,10 @@ enum Cmd {
         /// The queue to add to (by name; adds to the main queue with `--later` if omitted).
         #[arg(short = 'q', long = "queue")]
         queue: Option<String>,
+        /// The finished file must have this hash: hex MD5 / SHA-1 / SHA-256 / SHA-512 / CRC32,
+        /// optionally named ("sha256:…").
+        #[arg(long)]
+        checksum: Option<String>,
         /// Add to the queue without starting it now.
         #[arg(short = 'l', long = "later")]
         later: bool,
@@ -445,12 +449,14 @@ fn status_command(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 fn add_command(
     url: String,
     output: Option<PathBuf>,
     name: Option<String>,
     category: Option<String>,
     queue: Option<String>,
+    checksum: Option<String>,
     later: bool,
     silent: bool,
 ) -> mdm_ipc::Command {
@@ -466,6 +472,7 @@ fn add_command(
         name,
         category,
         queue,
+        checksum,
         later,
         silent,
         ..Default::default()
@@ -1342,10 +1349,11 @@ async fn run(cmd: Cmd, json: bool, accounts: Option<&dyn Accounts>) -> anyhow::R
             name,
             category,
             queue,
+            checksum,
             later,
             silent,
         } => ask(add_command(
-            url, output, name, category, queue, later, silent,
+            url, output, name, category, queue, checksum, later, silent,
         )),
         Cmd::StartQueue { queue, name } => ask(mdm_ipc::Command {
             action: Some("start_queue".into()),
@@ -1975,11 +1983,13 @@ mod tests {
                 name: None,
                 category: None,
                 queue: None,
+                checksum: None,
                 later: false,
                 silent: false,
             } if url == "https://example.test/a.zip"
         ));
 
+        let sha256 = "sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08";
         let cli = Cli::try_parse_from([
             NAME,
             "add",
@@ -1992,6 +2002,8 @@ mod tests {
             "Torrents",
             "-q",
             "Night",
+            "--checksum",
+            sha256,
             "-l",
             "-s",
         ])
@@ -2004,6 +2016,7 @@ mod tests {
                 name: Some(ref n),
                 category: Some(ref c),
                 queue: Some(ref q),
+                checksum: Some(ref h),
                 later: true,
                 silent: true,
             } if url == "magnet:?xt=urn:btih:abc"
@@ -2011,7 +2024,23 @@ mod tests {
                 && n == "my_torrent"
                 && c == "Torrents"
                 && q == "Night"
+                && h == sha256
         ));
+
+        let cmd = match cli.cmd {
+            Cmd::Add {
+                url,
+                output,
+                name,
+                category,
+                queue,
+                checksum,
+                later,
+                silent,
+            } => add_command(url, output, name, category, queue, checksum, later, silent),
+            _ => unreachable!(),
+        };
+        assert_eq!(cmd.checksum.as_deref(), Some(sha256));
     }
 
     #[test]
@@ -2024,6 +2053,7 @@ mod tests {
         let cmd = add_command(
             "https://example.test/a.zip".into(),
             Some(rel),
+            None,
             None,
             None,
             None,
