@@ -2123,6 +2123,82 @@ fn withdraw(window: u32) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+/// Linux, XWayland only: a window of MDM's was clicked while it hasn't the keyboard (winit
+/// saw it lose the X input focus, or never get it), so the X server's input focus goes to it:
+/// to the window under the pointer, when it is MDM's and the focus is elsewhere. A window manager
+/// gives a clicked window the focus; Hyprland's (0.56) can leave the focus with another X11
+/// window than the one it shows active, and never sets it again since it takes that one for
+/// focused already: after another X11 program's window took the focus itself (Hyprland's revert
+/// then does nothing), or after MDM's main window was hidden in the notification area and shown
+/// again (the focus went with the window, and came back to none). Clicks kept working, keys went
+/// elsewhere: File Properties' boxes took the caret, but no typing and no Ctrl+V. Keys reach
+/// an X11 window only while the compositor gives XWayland the keyboard, so this never takes it
+/// from another program. Native Wayland: the compositor alone decides, nothing to do. Plain
+/// Xorg: the window manager's own focus rules stand (some keep the keyboard on a dialog while
+/// the main window behind it is clicked), nothing to do either.
+#[cfg(target_os = "linux")]
+pub fn take_keyboard_on_click() {
+    if !takes_keyboard_on_click(window_system()) || crate::offscreen() {
+        return;
+    }
+    match keyboard_to_window_under_pointer() {
+        Ok(Some(window)) => {
+            tracing::info!("a window clicked without the keyboard (X11): given it (0x{window:x})");
+        }
+        Ok(None) => {}
+        Err(e) => tracing::warn!("the clicked window couldn't be given the keyboard: {e}"),
+    }
+}
+
+/// Whether [`take_keyboard_on_click`] acts under `ws`: only in XWayland, X11 windows in a
+/// Wayland session (not native Wayland, not plain Xorg).
+#[cfg(target_os = "linux")]
+fn takes_keyboard_on_click(ws: &WindowSystem) -> bool {
+    ws.x11_over_wayland && !ws.wayland
+}
+
+/// [`take_keyboard_on_click`]'s work, on a connection of MDM's own: the X input focus to this
+/// process's window under the pointer, unless it has it. Some(window) when it was given.
+#[cfg(target_os = "linux")]
+fn keyboard_to_window_under_pointer() -> Result<Option<u32>, Box<dyn std::error::Error>> {
+    use x11rb::connection::Connection;
+    use x11rb::protocol::xproto::{AtomEnum, ConnectionExt, InputFocus};
+    let (conn, screen) = x11rb::rust_connection::RustConnection::connect(None)?;
+    let root = conn.setup().roots.get(screen).ok_or("no such screen")?.root;
+    let pid_atom = conn.intern_atom(false, b"_NET_WM_PID")?.reply()?.atom;
+    // Down from the root to the program's window under the pointer: XWayland's root holds it,
+    // an X11 window manager's frame may (reparenting). The first with a process id is the one.
+    let mut window = root;
+    let mut ours = None;
+    for _ in 0..8 {
+        let child = conn.query_pointer(window)?.reply()?.child;
+        if child == x11rb::NONE {
+            break;
+        }
+        window = child;
+        let pid = conn
+            .get_property(false, window, pid_atom, AtomEnum::CARDINAL, 0, 1)?
+            .reply()?
+            .value32()
+            .and_then(|mut v| v.next());
+        if let Some(pid) = pid {
+            ours = (pid == std::process::id()).then_some(window);
+            break;
+        }
+    }
+    let Some(window) = ours else {
+        return Ok(None);
+    };
+    if conn.get_input_focus()?.reply()?.focus == window {
+        return Ok(None);
+    }
+    // The time of now: the click that asks for it has just happened.
+    conn.set_input_focus(InputFocus::PARENT, window, x11rb::CURRENT_TIME)?;
+    // A round trip: the request reached the server before the connection closes.
+    conn.get_input_focus()?.reply()?;
+    Ok(Some(window))
+}
+
 /// Linux: the vendor OpenGL says it is (`GL_VENDOR`), with eframe's context current.
 #[cfg(target_os = "linux")]
 #[allow(unsafe_code)]
@@ -3789,6 +3865,19 @@ mod tests {
         let b = super::menu_window(crate::window_builder(), MenuKind::Bar);
         assert_eq!(b.override_redirect, Some(true));
         assert_eq!(b.window_type, Some(X11WindowType::DropdownMenu));
+    }
+
+    /// PR #1360: a click gives the keyboard only in XWayland; plain Xorg keeps its window
+    /// manager's focus rules, native Wayland the compositor's.
+    #[test]
+    fn a_click_takes_the_keyboard_in_xwayland_only() {
+        use super::takes_keyboard_on_click as takes;
+        let ws = |wayland, x11| choose_window_system(wayland, x11, Pick::Auto, CARED, |_| true);
+        assert!(takes(&ws(true, true)), "XWayland");
+        assert!(!takes(&ws(false, true)), "plain Xorg");
+        assert!(!takes(&ws(true, false)), "native Wayland, the only system");
+        let wayland = choose_window_system(true, true, Pick::Wayland("test"), CARED, |_| true);
+        assert!(!takes(&wayland), "native Wayland chosen");
     }
 
     const X11_KEYBOARD: &str = "libxkbcommon-x11.so.0";

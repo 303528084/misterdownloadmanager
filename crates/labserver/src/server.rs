@@ -25,6 +25,8 @@
 //!   pages, Docs exports, the sign-in page
 //! - MediaFire's on its own (`mediafire`): file pages, file hosts whose tickets expire, the
 //!   repair page
+//! - Rapidgator's on its own (`rapidgator`): a premium account's file pages, file hosts whose
+//!   links answer 404 once they expire
 //! - `GET /_log` — the request log as JSON; `DELETE /_log` clears it
 //!
 //! Every request is logged except `/`, `/_log` and `/redirect` (the engine's tests read the log
@@ -54,7 +56,7 @@ use tokio::task::JoinHandle;
 
 use crate::content;
 use crate::faults::{Faults, every, has_cookie, parse_flag};
-use crate::{debrid, drive, mediafire, pages, streams};
+use crate::{debrid, drive, mediafire, pages, rapidgator, streams};
 
 const CHUNK: u64 = 64 * 1024;
 
@@ -691,8 +693,8 @@ impl Drop for LabServer {
 }
 
 /// Every address the routes don't have, by its Host header: MediaFire's host names go to the fake
-/// MediaFire (`mediafire`), the rest to the fake Google Drive (`drive`, which answers 404 for
-/// any host but Google's).
+/// MediaFire (`mediafire`), Rapidgator's to the fake Rapidgator (`rapidgator`), the rest to the
+/// fake Google Drive (`drive`, which answers 404 for any host but Google's).
 async fn by_host(
     State(shared): State<Arc<Shared>>,
     ConnectInfo(peer): ConnectInfo<SocketAddr>,
@@ -707,6 +709,10 @@ async fn by_host(
     if mediafire::HOSTS.contains(&name) {
         let (name, port) = (name.to_owned(), port.to_owned());
         return mediafire::handle(shared, peer, method, uri, headers, &name, &port).await;
+    }
+    if rapidgator::HOSTS.contains(&name) {
+        let (name, port) = (name.to_owned(), port.to_owned());
+        return rapidgator::handle(shared, peer, method, uri, headers, &name, &port).await;
     }
     drive::handle(State(shared), ConnectInfo(peer), method, uri, headers).await
 }
@@ -742,6 +748,7 @@ GET|HEAD /gen/{size}[/{name}]?seed=N&<file params>&<faults>   size: 12345, 64K, 
     html_after=N   the first N requests for this path and query get the file, every later one
                    the page (as html=1 with html_type and html_cd): a link that leads to a
                    waiting page once the download is resumed; vary seed= for a fresh link
+    node=N         another server's copy of the same file: its own ETag and date
     etag=weak|per-request|none latency_ms=N range_latency_ms=N (only requests with a Range)
     range_rate=SIZE  the rate of answers to requests with a Range (instead of rate)
     burst=SIZE     with a rate, a link: a response the client stopped reading catches up with
@@ -892,6 +899,15 @@ MEDIAFIRE  a fake one for the engine's tests, on MediaFire's host names (resolve
                             /download_repair.php?qkey=KEY: a page linking the file's page
   download1589.mediafire.com  /t<expiry unix ms>/KEY/NAME (file params and faults as /gen):
                             the file until then, after it 302 to the repair page
+
+RAPIDGATOR  a fake one for the engine's tests, on Rapidgator's host names (resolve rapidgator.net
+    and s118.rapidgator.net to this server); hand-made pages (src/rapidgator.rs)
+  ids: lab<SIZE>t<TTL ms>[u<USES>][d], e.g. lab4Mt60000, lab1Mt60000u1d
+  rapidgator.net            /file/ID[/NAME.html]: with the cookie lab_session=premium, a page with
+                            a download link lasting TTL ms (answering USES requests), or with d a
+                            302 to it; without, a free account's page (no link)
+  s118.rapidgator.net       /download/<expiry unix ms>-<n>-ID (file params and faults as /gen):
+                            the file until then, 404 Not Found after
 
 HTTPS  --tls serves all of it over HTTPS as localhost, its certificate from a test CA made at start
   (written next to the log, or printed); --tls-cert picks a faulty one (a connection's fault,
@@ -1571,8 +1587,15 @@ pub(crate) async fn serve(
         Some("none") => None,
         _ => Some(format!("\"{seed:x}-{size:x}-{generation}\"")),
     };
-    let last_modified =
-        httpdate::fmt_http_date(UNIX_EPOCH + Duration::from_secs(1_790_000_000 + generation * 60));
+    // Another server's copy (`node`): its own ETag and date.
+    let node = f.node.unwrap_or(0);
+    let etag = etag.map(|e| match node {
+        0 => e,
+        n => format!("{}-n{n}\"", e.trim_end_matches('"')),
+    });
+    let last_modified = httpdate::fmt_http_date(
+        UNIX_EPOCH + Duration::from_secs(1_790_000_000 + generation * 60 + node * 12),
+    );
 
     // Decide the byte range to send.
     let if_range_ok = entry

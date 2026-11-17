@@ -1461,6 +1461,23 @@ These ship in the next version.
   it has its own taskbar button
 - ✅ The same video picked from the quality menu in a second tab of its page is a duplicate, even
   when its stream's address is signed for each load (it was downloaded again without a word)
+- ✅ **Refresh download address** opens the file page a file host's Download button was on (a
+  premium Rapidgator file), not the site's home page, in Chromium browsers too: the page is
+  noted as the download's load starts, before the browser closes the tab the button opened or
+  the tab moves on; a site's address alone is the download's page only when nothing names a page
+  on it ([#607](https://github.com/anefzaoui/misterdownloadmanager/issues/607))
+- ✅ A download whose link expired goes on: Rapidgator's file page (the tab the download came
+  from) is asked with the browser's sign-in for a fresh link, at most once per expiry and never
+  again at once for a link it then refused; a Rapidgator download stopped with an expired or
+  refused link, or any download after **Refresh download address**, takes the browser's own next
+  hand-off of the same file (same site, same name, same size when known; never a private
+  window's, nor an explicit, command-line or script add) as its new address and goes on, instead
+  of a second row starting over; a fresh link on another of Rapidgator's own servers, whose copy
+  has its own ETag and date, goes on there instead of failing at 100% with "the file changed on
+  the server" (any other site's same-size copy still stops)
+- ✅ Linux (XWayland on Hyprland): a click in MDM's window gives it the keyboard again where
+  Hyprland had left it with another X11 program's window, or with none after the window came back
+  from the notification area; a box in File Properties took the caret but no typing or Ctrl+V
 - ✅ Telegram Web's downloads stay with the browser, which makes them in the page
   ([#1345](https://github.com/anefzaoui/misterdownloadmanager/issues/1345))
 - ✅ A video in another site's player embedded in a page is named by the page's title, not the
