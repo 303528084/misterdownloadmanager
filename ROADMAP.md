@@ -564,6 +564,9 @@ Bug fixes from the first days of 0.5.0, a Safari extension, and more file types.
 
 These ship in the next version.
 
+- ✅ A stream's own address — an HLS playlist (`.m3u8`) or DASH's (`.mpd`) — opens the video
+  window like a page's: pasting a playlist downloads the video and merges it into one playable
+  file, instead of saving the playlist itself
 - ✅ The window never waits for the disk to log: lines go to the log's own thread through a
   queue that drops (and counts) what a stuck disk can't take, and a crash or freeze report
   carries the last lines from memory when the file doesn't have them yet
