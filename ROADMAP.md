@@ -564,6 +564,15 @@ Bug fixes from the first days of 0.5.0, a Safari extension, and more file types.
 
 These ship in the next version.
 
+- ✅ Tests: more of the ones that failed now and then on a busy runner are steady. A port that
+  stands for a server or a proxy that refuses is held for the whole test (one let go at once
+  could be taken before the request came, and the answer found there read as "can't reach the
+  server"); whether a program fell back is read once its run is over, not after a fixed wait; a
+  call that must never wait is offered a long wait it would show taking, not a short one any
+  busy machine takes; a linear-time check always runs its few rounds before it gives up; a DNS
+  that never answers is given a timeout with room to be asked; a stream's time budget times
+  its requests alone. Each was run in loops on a machine kept busy on purpose, on Windows and
+  Linux
 - ✅ The automation API's add may carry the checksum the finished file must have (the command
   line's `--checksum` form), kept with the download for **Verify checksum** and the finish
   check; one the app can't read is refused (`bad-request`) instead of dropped
