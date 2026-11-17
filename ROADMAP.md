@@ -1392,6 +1392,10 @@ These ship in the next version.
   ([#1262](https://github.com/anefzaoui/misterdownloadmanager/issues/1262))
 - ✅ Download panels: the hint under the sites list has its own row instead of running under
   Export...
+- ✅ Linux: pausing or cancelling a video (or a gallery) ends all of yt-dlp's processes, so it
+  stops downloading; MDM's exit and the command line's Ctrl+C end them too
+  ([#1301](https://github.com/anefzaoui/misterdownloadmanager/issues/1301); thanks to
+  [@arifrhm](https://github.com/arifrhm), who found the same cause)
 - ✅ Internet Archive: a download that needs your account keeps the browser's sign-in on its way to
   archive.org's storage servers (thanks to [@arifrhm](https://github.com/arifrhm))
   ([#1298](https://github.com/anefzaoui/misterdownloadmanager/issues/1298))
