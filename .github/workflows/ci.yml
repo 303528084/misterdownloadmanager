@@ -157,7 +157,8 @@ jobs:
   # programs import (tools/win7/imports.py: a new import Windows 7 lacks fails here); the tests run
   # on the runner's newer Windows. Pull requests: x64, the programs and the import check, without
   # link-time optimisation (a whole program optimised at once imports no more than its parts).
-  # Main and by hand: x64 and x86, with the tests. A pull request reads the cache, never saves it.
+  # Main and by hand: x64 and x86, with the tests. Its cache holds cargo's downloads only, saved on
+  # main and by hand: these targets' builds would push x64's cache out of the repository's 10 GB.
   windows-7:
     name: windows-7-${{ matrix.arch }}
     strategy:
@@ -185,12 +186,9 @@ jobs:
 
       - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-${{ env.TARGET }}-cargo-${{ hashFiles('Cargo.lock', 'tools/win7/toolchain.txt') }}
-          restore-keys: ${{ runner.os }}-${{ env.TARGET }}-cargo-
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-win7-cargo-registry-${{ hashFiles('Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-win7-cargo-registry-
 
       - name: NASM
         shell: pwsh
@@ -219,14 +217,27 @@ jobs:
         shell: pwsh
         run: ./tools/win7/cargo.ps1 -Arch ${{ matrix.arch }} test --workspace --no-default-features --features mdm-crash/native-symbols
 
+      # One copy for both processors (x86's run saves it if x64's hasn't).
       - uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         if: github.event_name != 'pull_request'
+        continue-on-error: true
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-${{ env.TARGET }}-cargo-${{ hashFiles('Cargo.lock', 'tools/win7/toolchain.txt') }}
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-win7-cargo-registry-${{ hashFiles('Cargo.lock') }}
+
+  # The windows-link copies patched into every build for Windows 7's (Cargo.toml [patch.crates-io],
+  # tools/win7/windows-link): the published crates, checked against the checksums Cargo.lock had,
+  # with only their Windows 7 change. Cargo.lock carries no checksum for a patched path.
+  vendored:
+    name: vendored windows-link
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - name: The published crates with only the Windows 7 change
+        run: python3 tools/win7/check_windows_link.py
 
   # A translator's reviewed rows (no "#, machine" line) must survive every pull request: no
   # tool or merge may drop them or hand them back to machine translation.
