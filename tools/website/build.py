@@ -1347,6 +1347,9 @@ def fill(text: str) -> str:
     for system in PROCESSORS:
         text = text.replace(f"<!--@processors {system}-->", processor_rows(system))
         text = text.replace("{{" + system.upper() + "_CPUS}}", processor_names(system))
+    # What Windows 7 needs (<!--@windows7 ...-->): said once the latest release has its files.
+    text = re.sub(r"<!--@windows7 (.*?)-->", lambda m: m.group(1) if processor_out("setup_win7_x64") else "",
+                  text, flags=re.S)
     if "{{BENCH_REPORT}}" in text:
         text = text.replace("{{BENCH_REPORT}}", bench_report())
     for k in ("stars", "forks", "issues", "watchers"):
