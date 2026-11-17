@@ -8482,11 +8482,29 @@ mod open_file_tests {
     }
 }
 
+/// The `(Default)` verb under `HKCR\<class>\shell`, when a file manager registers its own verb
+/// name (such as `OpenInOneCommander`) instead of `open`: `AssocQueryStringW` with `verb = None`
+/// looks up `open` rather than `shell`'s `(Default)` value. The value may list several verbs,
+/// comma-separated, in order: the first is the default.
+fn default_shell_verb(class: &str) -> Option<String> {
+    use windows_sys::Win32::System::Registry::HKEY_CLASSES_ROOT;
+    reg_string_in(HKEY_CLASSES_ROOT, &format!(r"{class}\shell"), "")
+        .as_deref()
+        .and_then(first_verb)
+}
+
+/// The first verb of a `shell` key's `(Default)` value, which may list several (`a, b`).
+fn first_verb(value: &str) -> Option<String> {
+    let first = value.split(',').next().unwrap_or("").trim();
+    (!first.is_empty()).then(|| first.to_owned())
+}
+
 /// The program Windows runs to open folders, when that isn't Explorer (a file manager such as
-/// Directory Opus set up to replace it, #446); None for Explorer, or when Windows doesn't say.
+/// Directory Opus or One Commander set up to replace it, #446, #1335); None for Explorer, or
+/// when Windows doesn't say.
 pub fn folder_opener() -> Option<String> {
     use windows_sys::Win32::UI::Shell::{ASSOCF_NONE, ASSOCSTR_EXECUTABLE, AssocQueryStringW};
-    other_folder_opener(|class, verb| {
+    other_folder_opener(default_shell_verb, |class, verb| {
         let wide = |s: &str| s.encode_utf16().chain(Some(0)).collect::<Vec<u16>>();
         let class = wide(class);
         let verb = verb.map(wide);
@@ -8511,20 +8529,28 @@ pub fn folder_opener() -> Option<String> {
     })
 }
 
-/// Who opens a folder, asked of `executable_for(class, verb)` as the shell reads it: a folder is
-/// a `Directory` first (where a replacement registers its verb, as the default or as `open`),
-/// then a `Folder` (where Windows registers Explorer). An installed program's other verbs there
-/// ("Open with Code") are not the default and aren't asked for.
+/// Who opens a folder, asked of `default_verb_for(class)` and `executable_for(class, verb)` as
+/// the shell reads it: a folder is a `Directory` first (where a replacement registers its verb,
+/// as `shell`'s `(Default)` verb, as the default query, or as `open`), then a `Folder` (where
+/// Windows registers Explorer, or another manager sets `Folder\shell`'s `(Default)`). An installed
+/// program's other verbs there ("Open with Code") are not the default and aren't asked for.
 fn other_folder_opener(
+    default_verb_for: impl Fn(&str) -> Option<String>,
     executable_for: impl Fn(&str, Option<&str>) -> Option<String>,
 ) -> Option<String> {
-    let opener = [
-        ("Directory", None),
-        ("Directory", Some("open")),
-        ("Folder", None),
-    ]
-    .into_iter()
-    .find_map(|(class, verb)| executable_for(class, verb))?;
+    let dir_default = default_verb_for("Directory");
+    let folder_default = default_verb_for("Folder");
+    let candidates = [
+        dir_default.as_deref().map(|v| ("Directory", Some(v))),
+        Some(("Directory", None)),
+        Some(("Directory", Some("open"))),
+        folder_default.as_deref().map(|v| ("Folder", Some(v))),
+        Some(("Folder", None)),
+    ];
+    let opener = candidates
+        .into_iter()
+        .flatten()
+        .find_map(|(class, verb)| executable_for(class, verb))?;
     let name = opener.rsplit(['\\', '/']).next().unwrap_or(&opener);
     (!name.is_empty() && !name.eq_ignore_ascii_case("explorer.exe")).then_some(opener)
 }
@@ -8535,13 +8561,15 @@ mod folder_opener_tests {
 
     const EXPLORER: &str = r"C:\Windows\Explorer.exe";
     const OPUS: &str = r"C:\Program Files\GPSoftware\Directory Opus\dopusrt.exe";
+    const ONE_COMMANDER: &str =
+        r"C:\Users\example\scoop\apps\onecommander\current\OneCommander.exe";
 
     /// #446: as Windows is shipped (what `reg query` shows on a clean system), Explorer it is.
     #[test]
     fn explorer_as_shipped_is_no_other_opener() {
         let shipped =
             |c: &str, v: Option<&str>| (c == "Folder" && v.is_none()).then(|| EXPLORER.to_owned());
-        assert_eq!(other_folder_opener(shipped), None);
+        assert_eq!(other_folder_opener(|_| None, shipped), None);
     }
 
     /// A replacement's default verb on `Directory` wins over Explorer on `Folder`.
@@ -8552,7 +8580,62 @@ mod folder_opener_tests {
             ("Folder", None) => Some(EXPLORER.to_owned()),
             _ => None,
         };
-        assert_eq!(other_folder_opener(opus).as_deref(), Some(OPUS));
+        assert_eq!(other_folder_opener(|_| None, opus).as_deref(), Some(OPUS));
+    }
+
+    /// A `shell` key's `(Default)` may list verbs in order; the first is the default.
+    #[test]
+    fn the_first_listed_verb_is_the_default() {
+        use super::first_verb;
+        assert_eq!(
+            first_verb("OpenInOneCommander").as_deref(),
+            Some("OpenInOneCommander")
+        );
+        assert_eq!(
+            first_verb(" OpenInOneCommander , open").as_deref(),
+            Some("OpenInOneCommander")
+        );
+        assert_eq!(first_verb("  "), None);
+        assert_eq!(first_verb(",open"), None);
+    }
+
+    /// #1335: a replacement registering a custom `(Default)` verb under `Directory\shell` (such
+    /// as `OpenInOneCommander`), or `Folder\shell`, where `AssocQueryStringW(..., None)` returns
+    /// no association.
+    #[test]
+    fn a_custom_default_verb_in_registry_is_the_opener() {
+        let dir_verb = |c: &str| (c == "Directory").then(|| "OpenInOneCommander".to_owned());
+        let one_commander = |c: &str, v: Option<&str>| match (c, v) {
+            ("Directory", Some("OpenInOneCommander")) => Some(ONE_COMMANDER.to_owned()),
+            ("Folder", Some("open")) => Some(EXPLORER.to_owned()),
+            _ => None,
+        };
+        assert_eq!(
+            other_folder_opener(dir_verb, one_commander).as_deref(),
+            Some(ONE_COMMANDER)
+        );
+
+        let folder_verb = |c: &str| (c == "Folder").then(|| "openindopus".to_owned());
+        let opus = |c: &str, v: Option<&str>| match (c, v) {
+            ("Folder", Some("openindopus")) => Some(OPUS.to_owned()),
+            _ => None,
+        };
+        assert_eq!(
+            other_folder_opener(folder_verb, opus).as_deref(),
+            Some(OPUS)
+        );
+
+        let custom_explorer = |c: &str, v: Option<&str>| match (c, v) {
+            ("Directory", Some("OpenInExplorer")) => Some(EXPLORER.to_owned()),
+            _ => None,
+        };
+        assert_eq!(
+            other_folder_opener(
+                |c| (c == "Directory").then(|| "OpenInExplorer".to_owned()),
+                custom_explorer
+            ),
+            None
+        );
     }
 
     /// One that replaces `Directory`'s `open` verb, or `Folder`'s own.
@@ -8564,14 +8647,14 @@ mod folder_opener_tests {
             _ => None,
         };
         assert_eq!(
-            other_folder_opener(open).as_deref(),
+            other_folder_opener(|_| None, open).as_deref(),
             Some(r"C:\Apps\files.exe")
         );
         let folder = |c: &str, v: Option<&str>| {
             (c == "Folder" && v.is_none()).then(|| r"C:\Apps\tc.exe".to_owned())
         };
         assert_eq!(
-            other_folder_opener(folder).as_deref(),
+            other_folder_opener(|_| None, folder).as_deref(),
             Some(r"C:\Apps\tc.exe")
         );
     }
@@ -8580,8 +8663,8 @@ mod folder_opener_tests {
     #[test]
     fn explorer_any_case_or_no_answer_is_no_other_opener() {
         let upper = |_: &str, _: Option<&str>| Some(r"C:\WINDOWS\EXPLORER.EXE".to_owned());
-        assert_eq!(other_folder_opener(upper), None);
-        assert_eq!(other_folder_opener(|_, _| None), None);
+        assert_eq!(other_folder_opener(|_| None, upper), None);
+        assert_eq!(other_folder_opener(|_| None, |_, _| None), None);
     }
 }
 
