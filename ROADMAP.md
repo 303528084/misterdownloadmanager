@@ -1463,6 +1463,9 @@ These ship in the next version.
   when its stream's address is signed for each load (it was downloaded again without a word)
 - ✅ Telegram Web's downloads stay with the browser, which makes them in the page
   ([#1345](https://github.com/anefzaoui/misterdownloadmanager/issues/1345))
+- ✅ A video in another site's player embedded in a page is named by the page's title, not the
+  player's own ("Watch file.mp4 - VOE")
+  ([#1351](https://github.com/anefzaoui/misterdownloadmanager/issues/1351))
 - ✅ Torrents start again after a crash or a power cut left their saved list empty: the list is
   kept aside and a new one begins, the download list's torrents are added again from MDM's own
   copies and find their pieces on disk; MDM's own rewrite of the list reaches the disk before it
