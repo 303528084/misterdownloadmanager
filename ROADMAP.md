@@ -1495,6 +1495,10 @@ These ship in the next version.
   kept aside and a new one begins, the download list's torrents are added again from MDM's own
   copies and find their pieces on disk; MDM's own rewrite of the list reaches the disk before it
   replaces the old one ([#1357](https://github.com/anefzaoui/misterdownloadmanager/issues/1357))
+- ✅ **Options → General → Keep private-window downloads in the list** (off by default): a private
+  window's downloads are saved like any other and survive MDM closing or restarting, still apart
+  from normal windows' downloads (a saved private-window mark; their cookies never saved); a
+  private window's video never falls back to Cookies for video sites, after a restart either
 - ✅ The log's test of a flush writing what was dropped holds on a slow machine too (it failed now
   and then on macOS)
 

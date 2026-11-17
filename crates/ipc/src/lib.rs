@@ -67,7 +67,8 @@ pub struct Command {
     /// Content-Type (`post_type`).
     pub post: Option<String>,
     pub post_type: Option<String>,
-    /// From a private (incognito) window: the download is never written to the saved list.
+    /// From a private (incognito) window: the download is not written to the saved list, unless
+    /// the app's Options → General → "Keep private-window downloads in the list" is on.
     pub private: bool,
     /// Set by the native messaging host alone, on the download the browser itself handed over
     /// (its own download, cancelled in the browser): not by the command line, the automation API
