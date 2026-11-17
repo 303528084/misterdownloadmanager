@@ -2954,14 +2954,15 @@ pub fn thread_usage(_tid: u32) -> Option<crate::crash::Usage> {
 }
 
 /// macOS: tells the freeze watchdog when the window thread (the main thread, whose run loop
-/// AppKit runs) waits for the system's events and when it stops waiting (crash.rs `loop_waits`,
-/// #1314, #1349). Two observers of the main run loop in its common modes, which in an AppKit app
-/// hold the default, the modal panel and the event tracking modes ("Run Loop Modes", Apple's
-/// Threading Programming Guide): AppKit's own loops (menus, window drags, live resizes, modal
-/// panels) wait there too. Observers of one stage run "in increasing order" of their `order`
-/// (CFRunLoopObserverCreate): the wait's start is told last of every `kCFRunLoopBeforeWaiting`
-/// observer, so a frame Core Animation or winit draws in that stage isn't taken for waiting, and
-/// its end first of every `kCFRunLoopAfterWaiting` one. False when they couldn't be made.
+/// AppKit runs) is in the system's event loop rather than in MDM's code (crash.rs `loop_seen`,
+/// `loop_waits`; #1314, #1349, #1369). Two observers of the main run loop in its common modes,
+/// which in an AppKit app hold the default, the modal panel and the event tracking modes ("Run
+/// Loop Modes", Apple's Threading Programming Guide), so AppKit's own loops (menus, window drags,
+/// live resizes, modal panels) are seen too. Observers of one stage run "in increasing order" of
+/// their `order` (CFRunLoopObserverCreate): every stage but the wait is told first of its
+/// observers, and the wait's start last of the `kCFRunLoopBeforeWaiting` ones (after winit's,
+/// which runs eframe's frames there: crash.rs adds these after it). False when they couldn't be
+/// made.
 #[cfg(target_os = "macos")]
 #[allow(unsafe_code)]
 pub fn watch_run_loop() -> bool {
@@ -2977,12 +2978,15 @@ pub fn watch_run_loop() -> bool {
     ) {
         crate::crash::loop_waits();
     }
-    unsafe extern "C-unwind" fn woke(
+    unsafe extern "C-unwind" fn seen(
         _: *mut CFRunLoopObserver,
-        _: CFRunLoopActivity,
+        activity: CFRunLoopActivity,
         _: *mut c_void,
     ) {
-        crate::crash::loop_woke();
+        if activity.contains(CFRunLoopActivity::AfterWaiting) {
+            crate::crash::loop_woke();
+        }
+        crate::crash::loop_seen();
     }
 
     let Some(main) = CFRunLoop::main() else {
@@ -3002,10 +3006,15 @@ pub fn watch_run_loop() -> bool {
             ),
             CFRunLoopObserver::new(
                 None,
-                CFRunLoopActivity::AfterWaiting.0,
+                (CFRunLoopActivity::Entry
+                    | CFRunLoopActivity::BeforeTimers
+                    | CFRunLoopActivity::BeforeSources
+                    | CFRunLoopActivity::AfterWaiting
+                    | CFRunLoopActivity::Exit)
+                    .0,
                 true,
                 CFIndex::MIN,
-                Some(woke),
+                Some(seen),
                 std::ptr::null_mut(),
             ),
         )
