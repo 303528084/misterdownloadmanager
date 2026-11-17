@@ -2,14 +2,16 @@
 
 [← Back to docs index](README.md)
 
-MDM has a build of its own for **Windows 7 SP1**, 64-bit and 32-bit. It is **experimental**: it is
+MDM has a build of its own for **Windows 7 SP1**, 64-bit and 32-bit, **from a later release**:
+version 0.5.2 and the releases before it have no Windows 7 files. It is **experimental**: it is
 built and checked on newer Windows, and hasn't been tried on a real Windows 7 PC yet. If you run
 Windows 7, you can help: tell us how it went in an
 [issue](https://github.com/anefzaoui/misterdownloadmanager/issues).
 
 ## Choose a download
 
-The Windows 7 files carry `win7` and the processor in their names:
+From a later release, the [Releases](https://github.com/anefzaoui/misterdownloadmanager/releases)
+page has Windows 7 files, with `win7` and the processor in their names:
 
 | Files | For |
 |---|---|
@@ -40,7 +42,8 @@ everything below.
 
 ## What's different on Windows 7
 
-- **Drawing:** OpenGL only; **View → Draw with** has no Direct3D there.
+- **Drawing:** OpenGL only. The **View → Draw with** submenu isn't there at all: OpenGL is the
+  only way the Windows 7 build draws, so there is nothing to choose.
 - **Video pages:** yt-dlp's own Windows builds no longer start on Windows 7 (since its 2024.11.04
   version), so MDM doesn't download one there. **Helpers...** says MDM has no copy for this system:
   choose a yt-dlp that runs on Windows 7 with **Use another program...**, and MDM uses it.
@@ -90,4 +93,12 @@ Two libraries load a function by name themselves, which no import table shows: B
 browser-like connection's) takes Windows 8's `ProcessPrng` and ends the program without it, so the
 Windows 7 build leaves that connection out (`mdm_engine::browserlike::AVAILABLE` is false there
 whatever the features say); AWS-LC (rustls's) uses `BCryptGenRandom` instead when built for these
-targets.
+targets. So `imports.py check` also fails on a program that holds the name `ProcessPrng` or
+`bcryptprimitives` at all, and on one whose header asks for a newer Windows than 7 (an operating
+system or subsystem version above 6.1).
+
+windows-rs links a few COM functions from Windows 8's `combase.dll`. A copy of windows-link (the
+crate that names each function's DLL), patched into the workspace, links them from `ole32.dll`
+instead, on these targets only. A patch can't be limited to one target, so the copy is compiled
+into every build (where it does what windows-link does), and CI checks it is the published crate
+with that one change (`tools/win7/check_windows_link.py`).
