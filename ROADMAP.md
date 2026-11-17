@@ -1478,6 +1478,9 @@ These ship in the next version.
 - ✅ Linux (XWayland on Hyprland): a click in MDM's window gives it the keyboard again where
   Hyprland had left it with another X11 program's window, or with none after the window came back
   from the notification area; a box in File Properties took the caret but no typing or Ctrl+V
+- ✅ Linux: started without a Wayland display in a Wayland session (an XWayland-only start),
+  MDM knows its windows are XWayland's; Download File Info and Download complete answered a click
+  a second or two late while the main window was out of sight (on another workspace)
 - ✅ Telegram Web's downloads stay with the browser, which makes them in the page
   ([#1345](https://github.com/anefzaoui/misterdownloadmanager/issues/1345))
 - ✅ A video in another site's player embedded in a page is named by the page's title, not the
@@ -1505,6 +1508,11 @@ These ship in a later version, when they're ready.
 
 ### Bugs being looked into
 
+- 🔍 Linux on native Wayland: while the main window is out of sight (on another workspace), the
+  other windows (Download File Info, Download complete, the dialogs) don't open or don't answer
+  until it is shown again, as the compositor doesn't let a window it isn't showing redraw and
+  every dialog is drawn with the main window; the fix is in MDM's copy of the window library
+  (eframe), to come with it
 - 🔍 A look-up that waits 20 s on a video server the network doesn't answer
   ([#1053](https://github.com/anefzaoui/misterdownloadmanager/issues/1053))
 - 🔍 The main window's own looks at the disk on a drive slow to answer: starting or resuming a
