@@ -1714,7 +1714,9 @@ pub fn software() -> bool {
 /// [`run`] means none could, every way of the plan failed to start.
 static DREW: AtomicBool = AtomicBool::new(false);
 
-/// Whether a way of drawing started in this process ([`DREW`]).
+/// Whether a way of drawing started in this process ([`DREW`]). Asked on Windows only (main.rs's
+/// message box when nothing could draw).
+#[cfg_attr(not(windows), allow(dead_code))]
 pub fn drew() -> bool {
     DREW.load(Ordering::Relaxed)
 }
