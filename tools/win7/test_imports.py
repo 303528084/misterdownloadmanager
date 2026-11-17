@@ -9,6 +9,7 @@ Windows' own programs, 64-bit and 32-bit, where LLVM is installed (GitHub's Wind
 import os
 import re
 import shutil
+import struct
 import subprocess
 import sys
 import tempfile
@@ -25,6 +26,24 @@ def readobj():
         return found
     default = r"C:\Program Files\LLVM\bin\llvm-readobj.exe"
     return default if os.path.exists(default) else None
+
+
+def pe(os_version=(6, 0), subsystem=(6, 0), wide=True, extra=b""):
+    """A minimal PE file's bytes (headers only: no sections, no imports), asking for these
+    operating system and subsystem versions, followed by `extra`."""
+    lfanew = 0x40
+    optional_size = 240 if wide else 224
+    data = bytearray(lfanew + 24 + optional_size)
+    data[:2] = b"MZ"
+    struct.pack_into("<I", data, 0x3C, lfanew)
+    data[lfanew : lfanew + 4] = b"PE\0\0"
+    struct.pack_into("<HHIIIHH", data, lfanew + 4, 0x8664 if wide else 0x14C, 0, 0, 0, 0,
+                     optional_size, 0x22)
+    opt = lfanew + 24
+    struct.pack_into("<H", data, opt, 0x20B if wide else 0x10B)
+    struct.pack_into("<HH", data, opt + 40, *os_version)
+    struct.pack_into("<HH", data, opt + 48, *subsystem)
+    return bytes(data) + extra
 
 
 class TheList(unittest.TestCase):
@@ -55,13 +74,14 @@ class TheCheck(unittest.TestCase):
             ("combase.dll", "CoTaskMemAlloc"): ((5, 0), "5.0", "test"),
         }
 
-    def verdicts(self, imported):
-        real = imports.read_imports
+    def verdicts(self, imported, data=None):
+        real = imports.read_imports, imports.read_file
         imports.read_imports = lambda path: imported
+        imports.read_file = lambda path: pe() if data is None else data
         try:
             return [(name, why) for _, name, why in imports.check(["x.exe"], self.known)]
         finally:
-            imports.read_imports = real
+            imports.read_imports, imports.read_file = real
 
     def test_windows_7s_functions_pass(self):
         self.assertEqual(self.verdicts([("KERNEL32.dll", "CreateFileW", False)]), [])
@@ -79,6 +99,28 @@ class TheCheck(unittest.TestCase):
         self.assertEqual(len(got), 2)
         self.assertIn("not in tools/win7/win7-imports.tsv", got[0][1])
         self.assertIn("(delay-loaded)", got[1][0])
+
+
+    def test_a_header_asking_for_newer_windows_fails(self):
+        for wide in (True, False):
+            # MSVC's own defaults and MDM's GUI (/SUBSYSTEM:WINDOWS,5.02) pass.
+            for ok in ((6, 0), (6, 1), (5, 2)):
+                self.assertEqual(self.verdicts([], pe(ok, ok, wide)), [], ok)
+            got = self.verdicts([], pe((10, 0), (6, 0), wide))
+            self.assertEqual(len(got), 1, got)
+            self.assertIn("operating system version 10.0", got[0][0])
+            got = self.verdicts([], pe((6, 0), (6, 2), wide))
+            self.assertEqual(len(got), 1, got)
+            self.assertIn("subsystem version 6.2", got[0][0])
+
+    def test_windows_8s_random_numbers_by_name_fail(self):
+        for name in ("ProcessPrng", "bcryptprimitives"):
+            for encoding in ("ascii", "utf-16-le"):
+                got = self.verdicts([], pe(extra=b"..." + name.encode(encoding) + b"\0"))
+                self.assertEqual(len(got), 1, (name, encoding))
+                self.assertIn(name, got[0][0])
+        # Windows 7's own: RtlGenRandom (SystemFunction036), BCryptGenRandom.
+        self.assertEqual(self.verdicts([], pe(extra=b"BCryptGenRandom\0SystemFunction036")), [])
 
 
 class TheDocsVersions(unittest.TestCase):

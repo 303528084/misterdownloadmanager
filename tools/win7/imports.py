@@ -20,6 +20,14 @@ documented as Windows 2000's, which ole32.dll has on Windows 7).
 Delay-loaded imports are listed and checked too: they are only looked up when first called, so
 one Windows 7 lacks is not fatal at start, but it fails where it is called, which is a bug all
 the same unless the caller checks first (then it goes in the list with its note).
+
+`check` also fails on two things no import table shows:
+- a program whose header asks for a newer Windows than 7 (its operating system or subsystem
+  version above 6.1: Windows 7 refuses to start it, "not a valid Win32 application");
+- the name `ProcessPrng` or `bcryptprimitives` anywhere in a program (ASCII or UTF-16):
+  BoringSSL and AWS-LC load Windows 8's ProcessPrng by name and end the program without it, so
+  either name means one of them is built in its Windows 8 way (the browser-like connection, or
+  AWS-LC built without its Windows 7 setting, e.g. through its CMake fallback).
 """
 
 import os
@@ -135,10 +143,50 @@ def load_list(path=LIST):
     return known
 
 
+# What a program for Windows 7 must not name: Windows 8's random number function, and its DLL.
+FORBIDDEN = ("ProcessPrng", "bcryptprimitives")
+
+
+def read_file(path):
+    with open(path, "rb") as f:
+        return f.read()
+
+
+def header_versions(data):
+    """(operating system version, subsystem version) a PE file's optional header asks for, each a
+    (major, minor) pair (at the same offsets in PE32 and PE32+)."""
+    pe = struct.unpack_from("<I", data, 0x3C)[0]
+    if data[:2] != b"MZ" or data[pe : pe + 4] != b"PE\0\0":
+        raise ValueError("not a Windows program")
+    opt = pe + 24
+    os_major, os_minor = struct.unpack_from("<HH", data, opt + 40)
+    sub_major, sub_minor = struct.unpack_from("<HH", data, opt + 48)
+    return (os_major, os_minor), (sub_major, sub_minor)
+
+
+def file_problems(data):
+    """What a program's bytes say against Windows 7: [(what, why)]."""
+    problems = []
+    os_version, subsystem = header_versions(data)
+    for what, version in (("operating system version", os_version), ("subsystem version", subsystem)):
+        if version > WIN7:
+            problems.append((f"header's {what} {version[0]}.{version[1]}",
+                             "above Windows 7's 6.1: Windows 7 refuses to start it"))
+    for name in FORBIDDEN:
+        for encoding in ("ascii", "utf-16-le"):
+            if name.encode(encoding) in data:
+                problems.append((f"the name {name} ({encoding})",
+                                 "Windows 8's random numbers loaded by name: BoringSSL or AWS-LC "
+                                 "built its Windows 8 way, which ends the program on Windows 7"))
+    return problems
+
+
 def check(paths, known):
-    """The problems: [(program, dll!function, why)]."""
+    """The problems: [(program, dll!function or what, why)]."""
     problems = []
     for path in paths:
+        for what, why in file_problems(read_file(path)):
+            problems.append((path, what, why))
         for dll, fn, delayed in read_imports(path):
             name = f"{dll}!{fn}" + (" (delay-loaded)" if delayed else "")
             module = known.get((dll.lower(), "*"))
