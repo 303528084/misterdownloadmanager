@@ -6,7 +6,8 @@
 //!   for a dump of every thread while MDM is still stuck (a deadlock, an endless loop). A frame
 //!   is two timed stretches: the app's logic (commands and the clock, which egui runs alone while
 //!   the main window is minimized) and its UI. The waits between frames aren't timed, nor, on
-//!   macOS, the time a system Open or Save dialog is open ([`system_dialog`]).
+//!   macOS, the time a system Open or Save dialog is open ([`system_dialog`]) or the window
+//!   thread waits in the system's event loop with a stretch open ([`loop_waits`]).
 //!
 //! The monitor then shows the report window (crashui.rs). Without a monitor (it couldn't start)
 //! MDM runs on, and a panic still leaves a text report.
@@ -96,6 +97,16 @@ static UI_THREAD: OnceLock<u32> = OnceLock::new();
 static SYSTEM_DIALOGS: AtomicUsize = AtomicUsize::new(0);
 /// When the last system dialog closed (ms since EPOCH, + 1); 0 before any closed.
 static DIALOG_CLOSED: AtomicU64 = AtomicU64::new(0);
+/// The window thread waits in the system's event loop now ([`loop_waits`], macOS): since when
+/// (ms since EPOCH, + 1); 0 while it runs.
+static LOOP_WAIT: AtomicU64 = AtomicU64::new(0);
+/// How long the window thread has waited in the system's event loop in all, the wait going on
+/// not yet (ms).
+static LOOP_WAITED: AtomicU64 = AtomicU64::new(0);
+/// Counts the changes to the two above, odd while one is made: the watchdog reads them as one.
+static LOOP_SEQ: AtomicU64 = AtomicU64::new(0);
+/// [`LOOP_WAITED`] as the current stretch began.
+static STRETCH_WAITED: AtomicU64 = AtomicU64::new(0);
 
 /// Whether a system dialog runs on the window thread. macOS's Open and Save panels do: rfd hands
 /// them to the main thread, the window's, whatever thread asks for one, and AppKit runs them
@@ -143,6 +154,13 @@ pub fn start(data: &Path, session: Session, at_login: bool) {
     }
     let _ = REPORTER.set(reporter);
     hook_panics();
+    // macOS: the window thread's waits in the system's event loop ([`loop_waits`]). Windows and
+    // Linux run no system loop on the window thread inside a frame (their dialogs run on threads
+    // of their own, DIALOG_ON_WINDOW_THREAD), so nothing there is watched.
+    #[cfg(target_os = "macos")]
+    if !crate::unix::watch_run_loop() {
+        tracing::warn!("crash reports: the window's event loop can't be watched");
+    }
     let _ = std::thread::Builder::new()
         .name("freeze watchdog".into())
         .spawn(move || watchdog(at_login));
@@ -211,15 +229,19 @@ fn hook_panics() {
     }));
 }
 
-/// The window thread starts a timed stretch.
+/// The window thread starts a timed stretch. It runs, so it waits in no event loop now: a wait
+/// whose end went unseen ends here ([`loop_woke`]).
 fn stretch_begin(part: u8) {
+    loop_woke();
     PART.store(part, Ordering::Relaxed);
     STEP.store(Step::Start as u8, Ordering::Relaxed);
+    STRETCH_WAITED.store(LOOP_WAITED.load(Ordering::Acquire), Ordering::Release);
     FRAME_START.store(now_ms() + 1, Ordering::Release);
 }
 
 /// The stretch ended: no freeze (or no more of one); a slow one is logged.
 fn stretch_end() {
+    loop_woke();
     let start = FRAME_START.swap(0, Ordering::AcqRel);
     let took = now_ms().saturating_sub(start.saturating_sub(1));
     if start != 0 && took >= SLOW_FRAME.as_millis() as u64 {
@@ -235,8 +257,16 @@ fn stretch_end() {
             } else {
                 ""
             };
+        let waited = LOOP_WAITED
+            .load(Ordering::Acquire)
+            .saturating_sub(STRETCH_WAITED.load(Ordering::Acquire));
+        let waited = if waited > 0 {
+            format!(", {waited} ms of it waiting in the system's event loop")
+        } else {
+            String::new()
+        };
         tracing::info!(
-            "a slow frame: its {part} took {took} ms (at {}){dialog}",
+            "a slow frame: its {part} took {took} ms (at {}){dialog}{waited}",
             Step::now().label()
         );
     }
@@ -419,6 +449,86 @@ fn dialog_from(start: u64, open: bool, closed: u64, on_window_thread: bool) -> O
         None
     } else {
         Some(start.max(closed))
+    }
+}
+
+/// The window thread is about to wait in the system's event loop (macOS: an observer of the main
+/// run loop's `kCFRunLoopBeforeWaiting`, unix.rs `watch_run_loop`). It waits there between
+/// frames, and inside a frame when AppKit runs a loop of its own there (#1314, #1349): a window
+/// dragged by its body (`performWindowDragWithEvent:`, the drop target's), a menu tracked, a
+/// modal panel. A thread waiting for the system's events is no frozen window, whatever stretch is
+/// open: that's how macOS itself tells (its spinning wait cursor shows for an app whose main
+/// thread takes no events), and an endless loop, a deadlock or a stuck read never waits there.
+/// Only the window thread calls it. Windows and Linux don't watch their loop (`start`), so only
+/// the tests call it there.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+pub fn loop_waits() {
+    LOOP_SEQ.fetch_add(1, Ordering::SeqCst);
+    LOOP_WAIT.store(now_ms() + 1, Ordering::SeqCst);
+    LOOP_SEQ.fetch_add(1, Ordering::SeqCst);
+}
+
+/// The window thread's wait in the system's event loop ended (`kCFRunLoopAfterWaiting`), or it
+/// runs MDM's code, which it can't while it waits (a stretch begins or ends): the mark is cleared
+/// whether or not the loop said so, a window drag that never "ends" as an event too. Only the
+/// window thread calls it; a plain load when it wasn't waiting.
+pub fn loop_woke() {
+    if LOOP_WAIT.load(Ordering::Acquire) == 0 {
+        return;
+    }
+    LOOP_SEQ.fetch_add(1, Ordering::SeqCst);
+    let since = LOOP_WAIT.swap(0, Ordering::SeqCst);
+    if since != 0 {
+        LOOP_WAITED.fetch_add(now_ms().saturating_sub(since - 1), Ordering::SeqCst);
+    }
+    LOOP_SEQ.fetch_add(1, Ordering::SeqCst);
+}
+
+/// The window thread's waits in the system's event loop as one reading: how long it has waited
+/// in all (ms, the wait going on not yet), and since when it waits now (ms; None while it runs).
+/// None when the window thread changed them meanwhile, three times running (the next tick reads
+/// again).
+fn loop_now() -> Option<(u64, Option<u64>)> {
+    for _ in 0..3 {
+        let seq = LOOP_SEQ.load(Ordering::SeqCst);
+        if seq % 2 == 1 {
+            std::hint::spin_loop();
+            continue;
+        }
+        let waited = LOOP_WAITED.load(Ordering::SeqCst);
+        let wait = LOOP_WAIT.load(Ordering::SeqCst);
+        if LOOP_SEQ.load(Ordering::SeqCst) == seq {
+            return Some((waited, wait.checked_sub(1)));
+        }
+    }
+    None
+}
+
+/// Where the stretch that started at `start` (ms) is counted from at `now`, given the window
+/// thread's waits in the system's event loop since it began: later by the waits that ended
+/// (`waited`, ms) and by the one going on (`waiting`: since when, ms; None while the thread runs),
+/// so only the time the thread ran counts. A stall before the loop and one after it add up; the
+/// loop's own time is the system's.
+fn loop_from(start: u64, now: u64, waited: u64, waiting: Option<u64>) -> u64 {
+    let current = waiting.map_or(0, |since| now.saturating_sub(since.max(start)));
+    start
+        .saturating_add(waited)
+        .saturating_add(current)
+        .min(now)
+}
+
+/// What the run loop's mode (`CFRunLoopCopyCurrentMode`, unix.rs) says the window thread waits
+/// in, for the log. AppKit's own loops run in its modes: `NSEventTrackingRunLoopMode` while a
+/// menu, a window drag or a live resize tracks the mouse, `NSModalPanelRunLoopMode` in a modal
+/// panel ("Run Loop Modes", Apple's Threading Programming Guide). The default mode is the app's
+/// main loop, [NSApplication run], or a loop run in it.
+fn loop_mode(mode: Option<&str>) -> String {
+    match mode {
+        Some("kCFRunLoopDefaultMode") => "its main event loop".to_owned(),
+        Some("NSEventTrackingRunLoopMode") => "a menu, a window drag or a resize".to_owned(),
+        Some("NSModalPanelRunLoopMode") => "a modal panel".to_owned(),
+        Some(other) => other.to_owned(),
+        None => "a loop of the system's".to_owned(),
     }
 }
 
@@ -663,8 +773,9 @@ fn computers_for(
 /// (`at_login`, [`LOGIN_GRACE`]) and the first minute of a stall nobody could see, every window
 /// hidden and the window thread waiting ([`HIDDEN_GRACE`]), when a stall is logged, and reported
 /// only if it lasts past them. Nor are the waits between frames (no stretch runs then), nor the
-/// time a system dialog runs on the window thread ([`dialog_from`]: macOS), which is logged
-/// instead.
+/// time a system dialog runs on the window thread ([`dialog_from`]: macOS), nor the time the
+/// window thread waits in the system's event loop with a stretch open ([`loop_from`]: macOS),
+/// which are logged instead.
 fn watchdog(at_login: bool) {
     let tick = Duration::from_millis(500);
     let freeze_after = FREEZE_AFTER.as_millis() as u64;
@@ -676,6 +787,8 @@ fn watchdog(at_login: bool) {
     let mut noted_frame = 0u64;
     // The frame whose time in a system dialog was logged.
     let mut noted_dialog = 0u64;
+    // The frame whose time in the system's event loop was logged.
+    let mut noted_loop = 0u64;
     let ui = UI_THREAD.get().copied().unwrap_or(0);
     // The window thread's use when this tick first saw the current frame: (frame, ms, use).
     let mut seen: Option<(u64, u64, Option<Usage>)> = None;
@@ -703,10 +816,42 @@ fn watchdog(at_login: bool) {
         } else {
             "UI"
         };
+        // The stretch's time the window thread spent waiting in the system's event loop isn't
+        // counted (macOS, `loop_waits`). Read as one with the stretch: another one that began
+        // meanwhile is the next tick's.
+        let base = STRETCH_WAITED.load(Ordering::Acquire);
+        let Some((waited, waiting)) = loop_now() else {
+            continue;
+        };
+        if FRAME_START.load(Ordering::Acquire) != start {
+            continue;
+        }
+        let own = loop_from(start - 1, now, waited.saturating_sub(base), waiting);
+        let held = now.saturating_sub(start - 1);
         let (open, closed) = dialogs_now();
-        let Some(from) = dialog_from(start - 1, open, closed, DIALOG_ON_WINDOW_THREAD) else {
+        // Logged once, and not for a system dialog's loop (logged as the dialog below).
+        let no_dialog =
+            dialog_from(start - 1, open, closed, DIALOG_ON_WINDOW_THREAD) == Some(start - 1);
+        if noted_loop != start
+            && no_dialog
+            && held >= freeze_after
+            && now.saturating_sub(own) < freeze_after
+        {
+            noted_loop = start;
+            #[cfg(target_os = "macos")]
+            let mode = crate::unix::main_loop_mode();
+            #[cfg(not(target_os = "macos"))]
+            let mode: Option<String> = None;
+            tracing::info!(
+                "the window's {part} has waited {} of its {} s in the system's event loop ({}, at {}): not a freeze",
+                own.saturating_sub(start - 1) / 1000,
+                held / 1000,
+                loop_mode(mode.as_deref()),
+                Step::now().label()
+            );
+        }
+        let Some(from) = dialog_from(own, open, closed, DIALOG_ON_WINDOW_THREAD) else {
             // A system dialog runs on the window thread: the window waits for the person.
-            let held = now.saturating_sub(start - 1);
             if noted_dialog != start && held >= freeze_after {
                 noted_dialog = start;
                 tracing::info!(
@@ -1116,6 +1261,84 @@ mod watchdog_tests {
         });
         assert!(panicked.is_err());
         assert_eq!(dialogs_open(), 0, "closed by the panic too");
+    }
+
+    /// #1314, #1349: macOS reported a window as frozen while its thread waited in AppKit's event
+    /// loop (`[NSApplication run]` down to `CFRunLoopRunSpecific`, no frame of MDM's on it). The
+    /// time the window thread waits there with a stretch open isn't counted; the time it ran is,
+    /// before the wait and after it.
+    #[test]
+    fn a_wait_in_the_system_event_loop_is_not_a_freeze() {
+        let freeze = FREEZE_AFTER.as_millis() as u64;
+        // No wait: the stretch counts from its start (Windows and Linux always).
+        assert_eq!(loop_from(100_000, 130_000, 0, None), 100_000);
+        // The reports': a stretch at 100 s whose thread went back to wait at 100.2 s and still
+        // waits 30 s later: 0.2 s counted, logged instead.
+        let from = loop_from(100_000, 130_000, 0, Some(100_200));
+        assert_eq!(counted(from, 130_000, None), 200);
+        // A window drag (or a menu) inside a frame: AppKit waits between the mouse's moves, and
+        // handles each in a moment. 20 s of waits that ended, 2 s of handling: not a freeze.
+        let from = loop_from(0, 22_000, 20_000, None);
+        assert_eq!(counted(from, 22_000, None), 2_000);
+        // A stall before the loop and one after it add up: 7 s, a 10 s wait, then 1 s more.
+        let from = loop_from(0, 18_000, 10_000, None);
+        assert_eq!(counted(from, 18_000, None), 8_000);
+        assert!(counted(from, 18_000, None) >= freeze, "a freeze");
+        // Stuck a full FREEZE_AFTER after a 30 s wait: a freeze.
+        let from = loop_from(0, 30_000 + freeze, 30_000, None);
+        assert_eq!(counted(from, 30_000 + freeze, None), freeze);
+        // A wait going on counts from the stretch's start at the earliest, and never past now.
+        assert_eq!(loop_from(5_000, 9_000, 0, Some(1_000)), 9_000);
+        assert_eq!(loop_from(5_000, 9_000, 60_000, Some(8_000)), 9_000);
+        // A system dialog's modal loop is one such wait too: not counted twice.
+        let own = loop_from(100_000, 110_000, 9_000, None);
+        assert_eq!(dialog_from(own, false, 109_000, true), Some(109_000));
+        assert_eq!(counted(109_000, 110_000, None), 1_000);
+    }
+
+    /// The window thread's wait is told as it goes, read as one, and ends when the thread runs
+    /// MDM's code again: a drag whose end AppKit never tells ends at the next stretch's start,
+    /// whose own count begins after it.
+    #[test]
+    fn a_wait_ends_when_the_window_thread_runs_again() {
+        // Without a wait nothing changes.
+        let before = LOOP_WAITED.load(Ordering::SeqCst);
+        loop_woke();
+        assert_eq!(LOOP_WAITED.load(Ordering::SeqCst), before);
+        // A wait shows while it goes on, and is added to the total once it ends. (Other tests'
+        // frames may end it sooner: never later.)
+        loop_waits();
+        std::thread::sleep(Duration::from_millis(20));
+        loop_woke();
+        let after = LOOP_WAITED.load(Ordering::SeqCst);
+        assert!(after >= before);
+        assert_eq!(LOOP_WAIT.load(Ordering::SeqCst), 0);
+        assert_eq!(loop_now(), Some((after, None)));
+        // A stretch's start ends a wait the loop didn't, and doesn't count it as the stretch's.
+        loop_waits();
+        stretch_begin(UI);
+        assert_eq!(LOOP_WAIT.load(Ordering::SeqCst), 0);
+        assert_eq!(
+            STRETCH_WAITED.load(Ordering::SeqCst),
+            LOOP_WAITED.load(Ordering::SeqCst)
+        );
+        stretch_end();
+    }
+
+    /// The log names the loop AppKit runs from the run loop's mode.
+    #[test]
+    fn the_loop_is_named_from_its_mode() {
+        assert_eq!(
+            loop_mode(Some("NSEventTrackingRunLoopMode")),
+            "a menu, a window drag or a resize"
+        );
+        assert_eq!(loop_mode(Some("NSModalPanelRunLoopMode")), "a modal panel");
+        assert_eq!(
+            loop_mode(Some("kCFRunLoopDefaultMode")),
+            "its main event loop"
+        );
+        assert_eq!(loop_mode(Some("com.example.Mode")), "com.example.Mode");
+        assert_eq!(loop_mode(None), "a loop of the system's");
     }
 
     /// Every step has its label, and the store reads back as the same step.
