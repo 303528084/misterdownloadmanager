@@ -618,21 +618,27 @@ fn app() -> eframe::Result {
         }
         Shared(app)
     });
-    // No way of drawing started (Windows 7 with no graphics driver for OpenGL 2.1: no Direct3D 12
-    // there to fall back on, docs/windows-7.md): said in a message box, instead of an end
-    // without a word. The details are the last way's error, as the log has it.
+    // No way of drawing started: said in a message box, instead of an end without a word. In
+    // Windows 7's build OpenGL is the only way (no Direct3D 12 there, docs/windows-7.md), so it
+    // names the OpenGL 2.1 driver it needs; elsewhere Direct3D 12, its software renderer and
+    // OpenGL all failed, so it points at the graphics driver. The details are the last way's
+    // error, as the log has it.
     #[cfg(windows)]
     if let Err(e) = &result
         && !renderer::drew()
         && !offscreen()
     {
-        let text = i18n::fmt(
-            // i18n: a message box when Mister Download Manager can't draw its windows at all (no graphics driver with OpenGL 2.1 or later, as on Windows 7 without one); {details} = the system's error, in English
-            i18n::t(
-                "Mister Download Manager can't open its windows: this computer's graphics driver has no OpenGL 2.1 or later. Install your graphics card's driver (from its maker or Windows Update), then start Mister Download Manager again.\n\n{details}",
-            ),
-            &[("details", &short(&e.to_string(), 300))],
+        #[cfg(target_vendor = "win7")]
+        let template = i18n::t(
+            // i18n: Windows 7: a message box when Mister Download Manager can't draw its windows at all: Windows 7 has only OpenGL for it, and this computer's graphics driver has no OpenGL 2.1 or later (a PC without its graphics card's driver, a virtual machine, Remote Desktop); {details} = the system's error, in English
+            "Mister Download Manager can't open its windows: on Windows 7 it needs a graphics driver with OpenGL 2.1 or later, and this computer's has none. Install your graphics card's driver (from its maker or Windows Update), then start Mister Download Manager again.\n\n{details}",
         );
+        #[cfg(not(target_vendor = "win7"))]
+        let template = i18n::t(
+            // i18n: Windows 10 and 11: a message box when Mister Download Manager can't draw its windows at all: none of the ways it draws them (Direct3D 12, Windows' software renderer for it, OpenGL) started on this computer; {details} = the system's error, in English
+            "Mister Download Manager can't open its windows: none of the ways it draws them worked on this computer. Install or update your graphics card's driver (from its maker or Windows Update), then start Mister Download Manager again.\n\n{details}",
+        );
+        let text = i18n::fmt(template, &[("details", &short(&e.to_string(), 300))]);
         win32::message_box("Mister Download Manager", &text);
     }
     crash::clean_exit();
