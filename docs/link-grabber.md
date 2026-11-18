@@ -14,7 +14,7 @@
 - **The clipboard.** **Tasks → Add batch download from clipboard** (**Ctrl+B**, also in the tray icon's menu) reads the copied text when you choose it and lists every download link in it: `http`, `https`, `ftp` and magnet links, in a list, a forum post, Markdown or HTML, each once.
 - **Pasting.** Choose **Tasks → Link grabber...** and press **Ctrl+V**: every download link in the copied text is added.
 - **A web page's address.** Paste or copy the address of a page (`https://example.com/downloads`) and MDM reads the page and lists the links on it, as the browser's **Download all links** does, in a package named after the page. The page itself is left unticked. This works for addresses that came on their own (pasted, copied, typed, in a list), not for the links found on a page, so MDM never wanders off through a site. MDM reads only what the page itself holds: links a page's scripts add after it loads come only through the browser.
-- **Click'n'Load** buttons on link sites, once you turn it on. See [Click'n'Load](#clickn-load).
+- **Click'n'Load** buttons on link sites, once you turn it on. See [Click'n'Load](#clicknload).
 
 A magnet link shows as **Magnet link** and isn't looked up: once you click **Start** or **Add to queue**, MDM finds the torrent's files and adds it with all of them, in the package's folder (or the **Torrents** folder when the package has none).
 
@@ -64,7 +64,7 @@ The box under the list edits the package you selected:
 
 - **Name**: the package's name, kept with its downloads.
 - **Save to**: the folder its files go to. When a package holds several kinds of files, the box says **Each file's category folder**: each file goes to its category's folder (**Options → Save to**), as Import always did.
-- **Password**: the archives' password, if they have one. It is kept in memory only, never written to disk.
+- **Password**: the archives' password, if they have one. It is kept in memory only and is never saved by itself: to keep one for other packages, add it to your [archive passwords](#archive-passwords).
 - **Extract when done**: ticked by itself when the package holds an archive.
 - **Delete archives after extracting**: once extracted, the archives go to the Recycle Bin (the Trash on macOS and Linux).
 
@@ -80,7 +80,19 @@ MDM itself extracts zip archives (AES-encrypted and Deflate64 ones too), tar, ta
 
 **7z and RAR archives need 7-Zip**, a free program ([7-zip.org](https://www.7-zip.org/)). MDM runs it when it is installed, for split and encrypted archives too. RAR's own extraction code can't be part of a free program like MDM, and 7-Zip extracts 7z best.
 
-**Options → Archives** says whether 7-Zip was found. Without it, a 7z or RAR archive isn't extracted, and the **7-Zip needed** window says so, with a **Get 7-Zip** button.
+**Options → Archives** says whether 7-Zip was found. Without it, a 7z or RAR archive isn't extracted, and the **7-Zip needed** window says so, with a **Get 7-Zip** button. On Linux, install your distribution's `7zip` (or `p7zip`) package: MDM finds `7zz`, `7z` or `7za` on its own.
+
+### In place, with HatchZip
+
+[HatchZip](https://hatchzip.dev) is another free extractor (MIT or Apache-2.0), optional. MDM uses its command line program, `hatchzip`, when it is on the PATH (its installers and packages put it there; the desktop app alone isn't enough):
+
+- **Options → Archives → Extract in place with HatchZip** (off by default): HatchZip removes the archive while its files come out, so a 180 GB download that unpacks to 200 GB needs a little over 200 GB, not 380 GB. It reads zip, 7z, RAR and tar archives, split ones too; single `.gz` and `.xz` files are still extracted by MDM. A solid RAR archive can't be extracted in place (HatchZip says so before it changes anything): MDM then extracts it as usual, with 7-Zip, and keeps the archive. HatchZip's own release builds read RAR; a build from crates.io doesn't.
+- Before it changes anything, HatchZip checks that the files fit and proves the password. A missing or wrong password, or too little room, changes nothing: the log says so, and the **Archive password** window asks as usual. The password goes to HatchZip through its environment, never on its command line.
+- The files go where **What an archive holds goes** says, as with any other extraction. On the way they are in a folder named `<archive>.hatchzip-out` beside the archive.
+- If it stops partway (MDM closed, the download deleted, the disk filled by something else), the files extracted so far stay in that folder and the rest is still in the archive. **Extract** continues where it stopped, even with the option off: only HatchZip can finish such an archive. MDM continues only a run it started itself (it keeps a note of it in its own data): a HatchZip progress file (`<archive>.hatchzip`) that comes with a download or a torrent starts nothing, and that archive is extracted as usual.
+- Nothing HatchZip extracted is ever deleted, those files are no longer in the archive. Entries MDM leaves out (links, names leading outside the folder) stay in that folder, and so do the files a failed move couldn't put in place (a file held open by another program); the log says where. So after an extraction in place, a link an archive held that MDM considers unsafe is still in your download folder, inside `<archive>.hatchzip-out`: it is never followed or moved, but it isn't removed either, as it is by every other extraction. Look at what is left in that folder before you open it.
+- **Then move the archives to the Recycle Bin** has nothing to move afterwards: the archive is already gone.
+- 7z and RAR archives still need 7-Zip when the option is off.
 
 An archive is extracted:
 
@@ -97,7 +109,13 @@ Extracted files are marked as coming from the internet, as the archive is, so Wi
 
 MDM extracts safely. A name that would lead outside the folder is left out, and so is a link to somewhere else on the disk. An archive that would write far more than its size, or more than the disk has room for, stops before it fills it. When something goes wrong, nothing but the archive is left behind.
 
-The download's log (hover over it in the list) says what happened: **Extracted 12 files to …**, or why not, for example **Couldn't extract movie.7z.001: volume 3 of it is missing**. An encrypted archive without its password opens the **Archive password** window. Type the password and click **Extract**, or **Cancel** to leave the archive as it is.
+The download's log (hover over it in the list) says what happened: **Extracted 12 files to …**, or why not, for example **Couldn't extract movie.7z.001: volume 3 of it is missing**. Every archive is tried without a password first. One that turns out to be encrypted is tried with its package's password, then with each of your saved passwords (**Options → Archives → Archive passwords...**), in their order, so an archive that needs no password never meets them. Only when none fits does the **Archive password** window open. Type the password and click **Extract**, or **Cancel** to leave the archive as it is. Tick **Remember it for other archives** (it starts unticked) to add it to the saved passwords. 7-Zip is given each password on its input, never on its command line, where other programs on the computer could read it.
+
+### Archive passwords
+
+**Options → Archives → Archive passwords...** keeps the passwords you use again and again (a site's own, say), one per line. The download's log says **Trying the saved archive passwords...** while MDM tries them. The one that opens an archive moves to the top of the list, so the passwords you need most are tried first. A package's password (one you typed in Link grabber, or one that came with the links) is tried first and never added to the list by itself; when it is one of your saved passwords already, it moves to the top like any other. A password typed in the **Archive password** window is added only with **Remember it for other archives** ticked, and only once it fits. The list is kept in the system's keychain, as the other passwords are (see [Where the sign-in is kept](debrid.md#where-the-sign-in-is-kept)).
+
+Each try starts the extraction again: with a long list and a large archive whose file names aren't encrypted, it can take a moment before the right one is found.
 
 ## Next steps
 

@@ -202,6 +202,8 @@ pub struct Order {
     pub transfer: Option<String>,
     /// Its folder: the files go under it, in their paths.
     pub folder: PathBuf,
+    /// Custom file or folder name chosen in Add torrent (#517), when renamed from the torrent's own.
+    pub renamed: Option<String>,
     /// The downloads' options (connections, proxy, DNS, adapter, speed limit); the unlocker is
     /// set here.
     pub net: mdm_engine::Options,
@@ -352,9 +354,13 @@ impl RemoteTorrent {
         let folder = if files.len() == 1 {
             order.folder.clone()
         } else {
-            order
-                .folder
-                .join(safe_path(&name).unwrap_or_else(|| PathBuf::from("torrent")))
+            let folder_name = order
+                .renamed
+                .as_deref()
+                .and_then(safe_path)
+                .or_else(|| safe_path(&name))
+                .unwrap_or_else(|| PathBuf::from("torrent"));
+            order.folder.join(folder_name)
         };
         let within = |path: &str| {
             let t = path.trim_start_matches(['/', '\\']);
@@ -384,7 +390,16 @@ impl RemoteTorrent {
                     "the service gave a link MDM can't read".into(),
                 ))
             })?;
-            let dest = match safe_path(&within(&f.path)) {
+            let chosen_rel = if files.len() == 1 {
+                order
+                    .renamed
+                    .as_deref()
+                    .and_then(safe_path)
+                    .or_else(|| safe_path(&within(&f.path)))
+            } else {
+                safe_path(&within(&f.path))
+            };
+            let dest = match chosen_rel {
                 Some(rel) => {
                     let path = folder.join(rel);
                     if let Some(dir) = path.parent() {
@@ -397,14 +412,22 @@ impl RemoteTorrent {
                 None if f.path.trim().is_empty() => PathBuf::new(),
                 None => return Err(Fault::Service(ServiceFault::UnsafeName(f.path.clone()))),
             };
+            // Done in an earlier run: there, whole (no resume state beside it), and of the
+            // service's size when the service gives one. Another file of that name (another
+            // site's download, an earlier attempt whose state is gone) stays as it is: this one
+            // downloads beside it, under the engine's next numbered name.
             if !dest.as_os_str().is_empty()
                 && dest.is_file()
                 && !mdm_engine::state::state_path(&dest).exists()
+                && (f.size == 0 || std::fs::metadata(&dest).is_ok_and(|m| m.len() == f.size))
             {
-                // Done in an earlier run.
                 let mut sh = self.shared.lock().unwrap();
                 sh.done += f.size;
-                sh.saved_files.push(dest);
+                sh.saved_files.push(dest.clone());
+                // One file: the download is that file, as when it comes down below.
+                if files.len() == 1 {
+                    sh.folder = Some(dest);
+                }
                 continue;
             }
             let opts = mdm_engine::Options {
@@ -520,6 +543,16 @@ impl RemoteTorrent {
         if let Some(d) = &self.shared.lock().unwrap().current {
             d.set_speed_limit(rate);
         }
+    }
+
+    /// The speed limit of the file downloading now (None: none, or no file yet).
+    pub fn speed_limit(&self) -> Option<u64> {
+        self.shared
+            .lock()
+            .unwrap()
+            .current
+            .as_ref()
+            .and_then(Download::speed_limit)
     }
 
     /// As one download: the service's work first (no bytes yet), then its files' bytes in all.

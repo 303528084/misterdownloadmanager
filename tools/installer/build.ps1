@@ -1,10 +1,16 @@
-# Builds the Windows release into target/dist/:
-#   MisterDownloadManager-<version>-setup.exe     the installer (tools/installer/mdm.iss)
-#   MisterDownloadManager-<version>-portable.zip  the same programs with a `data` folder (portable
-#                                                 mode: settings beside the exe, no registry)
-#   MisterDownloadManager-<version>-x64.zip       the same programs, data in %APPDATA% as installed
+# Builds the Windows release for one processor into target/dist/ (-Arch x64, the default; arm64;
+# x86). The x64 files keep the names they had before there were others, so every copy installed
+# before finds its update (crates/tools/src/update.rs Install::assets_on):
+#   MisterDownloadManager-<version>-setup.exe        the installer (tools/installer/mdm.iss)
+#   MisterDownloadManager-<version>-portable.zip     the same programs with a `data` folder (portable
+#                                                    mode: settings beside the exe, no registry)
+#   MisterDownloadManager-<version>-x64.zip          the same programs, data in %APPDATA% as installed
+#   ...-setup-arm64.exe, ...-portable-arm64.zip, ...-arm64.zip   Windows on ARM (-Arch arm64)
+#   ...-setup-x86.exe, ...-portable-x86.zip, ...-x86.zip         32-bit Windows (-Arch x86)
 #   SHA256SUMS.txt
-# Needs Inno Setup 6 (ISCC.exe on PATH, in $env:ISCC, or in its default folders).
+# Needs Inno Setup 6.3 or later (ISCC.exe on PATH, in $env:ISCC, or in its default folders), and
+# Rust's target for the processor (rustup target add aarch64-pc-windows-msvc / i686-pc-windows-msvc).
+# The programs are built in target/<Rust's target>/release.
 # Code signing: set $env:MDM_SIGN_COMMAND to a signtool command line with $f for the file, e.g.
 #   signtool sign /fd sha256 /tr http://timestamp.digicert.com /td sha256 /a $f
 # Inno Setup then signs the programs (in place, so the zip carries them signed too), the
@@ -14,12 +20,16 @@
 #                            the programs and Inno Setup's uninstaller (named uninst-*.e32.exe)
 #   -Signed <dir>            no build: the installer and the zips from those files, once signed
 #   -SignedInstaller <file>  the installer, once signed, replaces the one in target/dist
-param([switch]$NoBuild, [string]$SignCommand = $env:MDM_SIGN_COMMAND, [string]$ToSign,
-  [string]$Signed, [string]$SignedInstaller)
+param([switch]$NoBuild, [string]$SignCommand = $env:MDM_SIGN_COMMAND,
+  [ValidateSet("x64", "arm64", "x86")][string]$Arch = "x64", [string]$ToSign, [string]$Signed,
+  [string]$SignedInstaller)
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $dist = Join-Path $root "target\dist"
-$bin = Join-Path $root "target\release"
+$target = @{ x64 = "x86_64-pc-windows-msvc"; arm64 = "aarch64-pc-windows-msvc"; x86 = "i686-pc-windows-msvc" }[$Arch]
+$bin = Join-Path $root "target\$target\release"
+# The files' names: x64's as before, the others with their processor.
+$suffix = if ($Arch -eq "x64") { "" } else { "-$Arch" }
 $programs = "misterdownloadmanager.exe", "misterdownloadmanager-nmhost.exe",
   "misterdownloadmanager-cli.exe", "misterdownloadmanager-mcp.exe"
 
@@ -41,7 +51,7 @@ function Assert-Signed([string]$path) {
 }
 
 if ($SignedInstaller) {
-  $setup = Join-Path $dist "MisterDownloadManager-$version-setup.exe"
+  $setup = Join-Path $dist "MisterDownloadManager-$version-setup$suffix.exe"
   if (-not (Test-Path -LiteralPath $setup)) { throw "no installer to replace: $setup" }
   Assert-Signed $SignedInstaller
   Copy-Item -LiteralPath $SignedInstaller $setup -Force
@@ -63,7 +73,7 @@ if (-not $NoBuild) {
   $cargoHome = if ($env:CARGO_HOME) { $env:CARGO_HOME } else { Join-Path $env:USERPROFILE ".cargo" }
   $env:CARGO_ENCODED_RUSTFLAGS = "--remap-path-prefix=$cargoHome=cargo" + [char]0x1f + "--remap-path-prefix=$root=mdm" + [char]0x1f + "-Ctarget-feature=+crt-static"
   try {
-    & cargo build --release -p mdm-app -p mdm-nmhost -p mdm-cli -p mdm-mcp
+    & cargo build --release --target $target -p mdm-app -p mdm-nmhost -p mdm-cli -p mdm-mcp
     if ($LASTEXITCODE) { throw "cargo build failed" }
   } finally {
     Remove-Item Env:CARGO_ENCODED_RUSTFLAGS
@@ -79,7 +89,7 @@ $iscc = @($env:ISCC, (Get-Command ISCC.exe -ErrorAction SilentlyContinue).Source
   "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe") |
   Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
 if (-not $iscc) { throw "Inno Setup 6 (ISCC.exe) not found" }
-$isccArgs = @("/Qp", "/DAppVersion=$version")
+$isccArgs = @("/Qp", "/DAppVersion=$version", "/DArch=$Arch")
 
 if ($ToSign) {
   # With /DUninstallerDir, Inno Setup writes the uninstaller there unsigned and stops ("attach
@@ -90,7 +100,7 @@ if ($ToSign) {
   $ToSign = (Resolve-Path -LiteralPath $ToSign).Path
   foreach ($exe in $programs) { Copy-Item (Join-Path $bin $exe) $ToSign }
   $ErrorActionPreference = "Continue" # ISCC's expected error on stderr, checked below
-  $log = & $iscc @isccArgs "/DUninstallerDir=$ToSign" (Join-Path $PSScriptRoot "mdm.iss") 2>&1
+  $log = & $iscc @isccArgs "/DBin=$bin" "/DUninstallerDir=$ToSign" (Join-Path $PSScriptRoot "mdm.iss") 2>&1
   $ErrorActionPreference = "Stop"
   $global:LASTEXITCODE = 0 # else a CI step ends with ISCC's exit code
   $uninst = @(Get-ChildItem -LiteralPath $ToSign -Filter "uninst-*.e32")
@@ -112,8 +122,9 @@ if ($Signed) {
   New-Item -ItemType Directory -Force $uninstDir | Out-Null
   Copy-Item -LiteralPath $uninst[0].FullName (Join-Path $uninstDir $uninst[0].BaseName)
   $isccArgs += @("/DBin=$bin", "/DUninstallerDir=$uninstDir")
-} elseif ($SignCommand) {
-  $isccArgs += @("/DSign", "/Smdmsign=$SignCommand")
+} else {
+  $isccArgs += "/DBin=$bin"
+  if ($SignCommand) { $isccArgs += @("/DSign", "/Smdmsign=$SignCommand") }
 }
 & $iscc @isccArgs (Join-Path $PSScriptRoot "mdm.iss")
 if ($LASTEXITCODE) { throw "ISCC failed" }
@@ -163,8 +174,8 @@ use the profile instead. Browser integration needs the installer.
   }
 }
 Add-Type -AssemblyName System.IO.Compression, System.IO.Compression.FileSystem
-New-Zip "MisterDownloadManager-$version-portable" $true
-New-Zip "MisterDownloadManager-$version-x64" $false
+New-Zip "MisterDownloadManager-$version-portable$suffix" $true
+New-Zip "MisterDownloadManager-$version-$Arch" $false
 Remove-Item -LiteralPath (Join-Path $dist "stage") -Recurse -Force
 
 Write-Sums

@@ -15,10 +15,11 @@ Some buttons are greyed. They belong to features that aren't built yet.
 - **Offer to download links copied to the clipboard** — when you copy a link whose file type is on the **File types** page, **Download File Info** opens with it, ready to start (or the download starts at once, with **Show start download dialog** off). It keeps to archives, programs, music, videos, PDF and any type you added yourself, so copying the address of a picture, a font or a 3D model to use somewhere else never starts a download. On by default.
 - **Use advanced browser integration** — let the browser extension hand downloads to MDM. Turn it off to keep every download in the browser.
 - **Confirm before deleting downloads** — ask before taking downloads off the list. On by default; **Don't show this dialog again** in that question turns it off, and ticking it here turns it back on.
-- **Keep running when closing the window** — closing the main window hides it in the notification area instead of quitting, and downloads, queues and schedules go on. On by default; unticked, closing quits MDM (so a [portable copy](portable.md)'s folder can then be deleted). If there is no icon for MDM at all — not even behind the ^ hidden icons — the window minimizes to the taskbar instead, so downloads continue and the window stays reachable; an icon behind ^ can be clicked to bring it back, or start MDM again. Greyed where no tray shows MDM's icon (some Linux desktops): closing quits there.
+- **Keep private-window downloads in the list** — save downloads that come from a browser's private (incognito) window in MDM's list like any other, so an unfinished one is still there to resume after MDM closes or restarts. Off by default: they are kept in memory only, as the browser keeps them, and are gone when MDM closes. Their cookies are never saved either way, and after a restart they still stay apart from normal windows' downloads (a private download that waits for a new address isn't given one by a normal window's, and a private window's video never uses **Cookies for video sites** from Sites Logins: if a site wants you signed in, open the page in a private window, sign in there, and use its Download video button again). Turning it off later doesn't remove the ones already saved by an earlier session.
+- **Keep running when closing the window** — closing the main window hides it in the notification area instead of quitting, and downloads, queues and schedules go on. On by default; unticked, closing quits MDM (so a [portable copy](portable.md)'s folder can then be deleted). If there is no icon for MDM at all — not even behind the ^ hidden icons — the window minimizes to the taskbar instead, so downloads continue and the window stays reachable; an icon behind ^ can be clicked to bring it back, or start MDM again. On macOS the window closes into the Dock, and a click on MDM's icon there (or in the menu bar) brings it back; **Cmd+Q** quits. Greyed where no tray shows MDM's icon (some Linux desktops): closing quits there.
 - **Minimize to the notification area** — Minimize hides the main window, and a download's progress window, in the notification area; downloads go on. On by default. Where the tray has no icon, the main window minimizes to the taskbar instead. The close setting above is separate; when it is on, closing hides there too (or minimizes to the taskbar if there is no icon at all). Greyed where no tray shows MDM's icon (some Linux desktops); in a Wayland session the main window stays minimized in the dock, since Wayland can't hide a window.
 - **Capture downloads from the following browsers** — untick a browser to leave its downloads alone.
-- **Customize MDM Download panels in browsers → Edit...** — the download button over videos on web pages: turn it off, or list the sites it never shows on (separate them by spaces; `*.example.com` covers its subdomains). See [Browser integration](browser-integration.md#the-download-button-over-videos).
+- **Customize MDM Download panels in browsers → Edit...** — the download button over videos on web pages: turn it off, choose its **Button size** (**Full**, its words where they fit, or **Compact**, only the logo, the arrow and ✕ on every video), or list the sites it never shows on (separate them by spaces; wildcards like `*.youtube.*`, `youtube.*` or `*.example.com` work). See [Browser integration](browser-integration.md#the-download-button-over-videos).
 
 See [Browser integration](browser-integration.md).
 
@@ -28,7 +29,7 @@ See [Browser integration](browser-integration.md).
 *File types: what the browser hands over, and the sites left alone.*
 
 - **Automatically start downloading the following file types** — the file types the browser hands over (and the clipboard picks up). Separate them by spaces; `*` matches any characters, as in `R0*`. **Default** puts the original list back. The list starts with the usual archives, programs and installers (Windows, macOS and Linux ones: DMG, PKG, DEB, RPM, APPIMAGE, MSIX), music and videos, PDF and Office files, AI models and datasets (GGUF, SAFETENSORS, CKPT, PT, ONNX, PARQUET), 3D and CAD files (GLB, FBX, OBJ, STL, BLEND, STEP), design and camera RAW files, ebooks, disk images and split archives. Pages, scripts, plain text and web images are left out on purpose, so saving a picture or a page stays with the browser; add any type you need, or put a single `*` in the box to take every file that has an extension. A list you never changed gains the types a new version adds; one you edited stays as it is.
-- **Don't start downloading automatically from the following sites** — sites whose downloads stay in the browser, separated by spaces. `*.example.com` covers every part of a site. **Default** puts the original list back.
+- **Don't start downloading automatically from the following sites** — sites whose downloads stay in the browser, separated by spaces. A name covers the site's subdomains too (`example.com` covers `www.example.com` and `dl.example.com`, as does `*.example.com`), `*` matches anything as in the Download panels' list (`*.example.*`), and the files its pages link to on another server (a download server or a CDN), told by the page the download came from. A download with no page known is matched by its own address. **Default** puts the original list back.
 
 ## Save to
 
@@ -51,6 +52,7 @@ MDM doesn't use a temporary folder: every connection writes straight into the fi
 ![Options on its Downloads page: the start download dialog, Download complete and duplicate links](images/help/options-downloads.webp)
 *Downloads: which windows show, and what a duplicate link does.*
 
+- **Customize "Download progress" dialog → Edit...** — **Show download progress dialog when a download starts**: on by default. Untick it and a download no longer opens its progress window when it starts, from the browser, a link you add, a video or a queue; it goes on in the main window's list, where a double-click opens its progress window. **Download complete** still shows when it finishes, as **Show download complete dialog** below says.
 - **Show start download dialog** — show **Download File Info** for each new download. With it off, downloads start at once, or only join the queue if you tick **Do not start downloading, only add files to the queue**.
 - **Show download complete dialog** — show **Download complete** when a file finishes.
 - **Start downloading immediately while displaying "Download File Info" dialog** — on by default, so the download is already under way while you choose a folder.
@@ -58,7 +60,7 @@ MDM doesn't use a temporary folder: every connection writes straight into the fi
 - **Show queue selection panel on closing batch download dialogs** — the same for batch downloads.
 - **Ignore file modification time changes when resuming a download** — for servers that report a new date for the same file each time. Without it, such a server makes every resume start over.
 - **If a duplicate download link is added** — ask, add it with a numbered name, overwrite the old one, or open the finished one / resume the unfinished one.
-- **User-Agent for manually added downloads** — how MDM names itself to servers for downloads you add yourself. With **Automatic** ticked (the default), MDM introduces itself as your default browser: the User-Agent that browser sends, at the version you have installed (Chrome, Edge, Brave, Opera, Vivaldi, Firefox or Safari). The box shows it, and pointing at it names the browser. When MDM doesn't recognise your default browser, it sends a current Chrome's. Untick **Automatic** to type your own; tick it again to go back. Downloads from the browser use that browser's own User-Agent. If a site turns a browser's User-Agent away, MDM asks once more with its own.
+- **User-Agent for manually added downloads** — how MDM names itself to servers for downloads you add yourself. With **Automatic** ticked (the default), MDM introduces itself as your default browser: the User-Agent that browser sends, at the version you have installed (Chrome, Edge, Brave, Opera, Vivaldi, Firefox or Safari). The box shows it, and pointing at it names the browser. When MDM doesn't recognise your default browser, it sends a current Chrome's. Untick **Automatic** to type your own; tick it again to go back. Downloads from the browser use that browser's own User-Agent, the one your sign-in and the site's checks know; the one typed here doesn't replace it. If a site turns a browser's User-Agent away, MDM asks once more with the one typed here (with **Automatic**, with Internet Explorer's). If a site's bot check refuses it, and the way a browser connects too, MDM asks once more under its own name, `MisterDownloadManager/` and its version (or the one typed here), and remembers that site until MDM closes. A User-Agent typed here for the downloads you add yourself is the only one they send.
 
 ## Connection
 
@@ -115,7 +117,7 @@ The passwords (these, the proxy's and the debrid accounts') are kept in the syst
 **Cookies for video sites** — for videos that play only when you're signed in (YouTube's "Sign in to confirm you're not a bot"):
 
 - **Off** (the default) — yt-dlp gets cookies only from the browser's extension, when you use the button over a video.
-- **From browser** — yt-dlp reads the chosen browser's cookies on this computer (Firefox, Chrome, Edge, Brave, Opera, Vivaldi, Chromium, Whale; Safari on macOS) for every video it looks up or downloads, pasted addresses included. When the extension passed the page's own cookies, those are used instead. **Profile (optional)**: a profile's name or folder (**...** chooses one); empty, the one used last. Chrome, Edge and Brave lock their cookies on Windows: Firefox works. See [Sites that want you signed in](video.md#sites-that-want-you-signed-in).
+- **From browser** — yt-dlp reads the chosen browser's cookies on this computer (Firefox, Chrome, Edge, Brave, Opera, Vivaldi, Chromium, Whale; Safari on macOS) for every video it looks up or downloads, pasted addresses included. When the extension passed the page's own cookies, those are used instead. A video from a browser's private window never reads them, a kept one after a restart included: it has only the cookies its private window gave. **Profile (optional)**: a profile's name or folder (**...** chooses one); empty, the one used last. Chrome, Edge and Brave lock their cookies on Windows: Firefox works. See [Sites that want you signed in](video.md#sites-that-want-you-signed-in).
 
 ## Accounts
 
@@ -151,10 +153,12 @@ Archives (zip, 7z, rar, tar, gz, xz), and [Link grabber](link-grabber.md).
 - **Extract archives when their download completes** (off by default) — every archive downloaded, as soon as it (or a split archive's last volume) is in. A Link grabber package has its own **Extract when done**.
 - **Then move the archives to the Recycle Bin** (off by default; the Trash on macOS and Linux) — after a successful extraction only. This is also the default of a new package's **Delete archives after extracting**.
 - **What an archive holds goes** — into a folder named after it when it holds several things (the default), always into such a folder, or straight into the archive's folder.
-- Whether **7-Zip** was found: 7z and RAR archives need it.
+- Whether **7-Zip** was found: 7z and RAR archives need it, unless they are extracted in place with HatchZip.
+- **Extract in place with HatchZip** (off by default; greyed out when HatchZip isn't installed) — the archive is removed while its files come out, so only they need room. See [Extracting archives](link-grabber.md#in-place-with-hatchzip).
+- **Archive passwords...** — the passwords tried on an encrypted archive before MDM asks, one per line; the one that fits moves to the top. A package's own password is never added by itself. See [Archive passwords](link-grabber.md#archive-passwords).
 - **Look links up when they arrive (name, size, online)** — Link grabber asks each server about its file (on by default).
 - **Hide web pages** — Link grabber's default for the same box (on).
-- **Accept Click'n'Load from web pages (port 9666)** (off by default) — a link site's Click'n'Load button sends its links to MDM's Link grabber. See [Click'n'Load](link-grabber.md#clickn-load).
+- **Accept Click'n'Load from web pages (port 9666)** (off by default) — a link site's Click'n'Load button sends its links to MDM's Link grabber. See [Click'n'Load](link-grabber.md#clicknload).
 
 ## Remote
 
@@ -176,7 +180,7 @@ Control MDM from your phone or another computer on the local network: see
 A few settings live outside this window:
 
 - **Downloads → Speed Limiter → Settings...** — speed limits. See [Connections and speed](connections-and-speed.md#speed-limiter).
-- **Tasks → Torrent settings...** — sharing and file associations. See [Torrents](torrents.md#torrent-settings).
+- **Tasks → Torrent settings...** — sharing and file associations, and whether the browser hands `.torrent` downloads to MDM. See [Torrents](torrents.md#torrent-settings).
 - **View → Dark Mode support**, **Always dark**, **Theme**, **Draw with**, **Interface size** and **Language**. See [Getting started](getting-started.md#themes) and [Troubleshooting](troubleshooting.md).
 - **Help → Check for updates...** — **Check for updates at every start** is in that window.
 
