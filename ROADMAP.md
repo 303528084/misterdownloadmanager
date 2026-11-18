@@ -564,6 +564,9 @@ Bug fixes from the first days of 0.5.0, a Safari extension, and more file types.
 
 These ship in the next version.
 
+- ✅ A Docker image of the headless server is published with each release, at
+  `ghcr.io/anefzaoui/misterdownloadmanager` (x86-64 only for now, thanks to
+  [@kngkatak](https://github.com/kngkatak))
 - ✅ File names as browsers read them: a server's percent-encoded `filename="My%20Report.pdf"` is
   `My Report.pdf`, as in Chrome and Firefox (it stayed encoded), and RFC 2047's encoded words are
   read too; checked behind one and two redirects, relative ones included
