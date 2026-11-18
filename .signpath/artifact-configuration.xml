@@ -7,16 +7,29 @@
      2. the installer, built from those (-Signed).
      Every .exe and .dll in it is signed (Authenticode, SHA-256), and must say it is this version
      of Mister Download Manager: its product name, and as its product version the "version" the
-     workflow passes (Cargo.toml's). The programs take both from tools/build/version_info.rs,
-     the installer and its uninstaller from tools/installer/mdm.iss. -->
+     workflow passes (Cargo.toml's). The programs take both from tools/build/version_info.rs.
+     The installer and its uninstaller take them from tools/installer/mdm.iss, but Inno Setup
+     writes them over fixed-width placeholders and keeps the placeholders' trailing spaces: the
+     product name is 60 characters, the product version 50 (Compiler.ExeUpdateFunc.pas,
+     UpdateStringValue). Their two entries below expect exactly that, which holds for a version of
+     5 characters (0.5.2); another length, or an Inno Setup whose widths differ, fails the
+     signing request instead of signing something unchecked. -->
 <artifact-configuration xmlns="http://signpath.io/artifact-configuration/v1">
   <parameters>
     <parameter name="version" required="true" />
   </parameters>
   <zip-file>
     <pe-file-set product-name="Mister Download Manager" product-version="${version}">
-      <include path="*.exe" max-matches="unbounded" />
-      <include path="*.dll" min-matches="0" max-matches="unbounded" />
+      <include path="misterdownloadmanager.exe" min-matches="0" />
+      <include path="misterdownloadmanager-nmhost.exe" min-matches="0" />
+      <include path="misterdownloadmanager-cli.exe" min-matches="0" />
+      <include path="misterdownloadmanager-mcp.exe" min-matches="0" />
+      <include path="uninst-*.e32.exe" min-matches="0"
+        product-name="Mister Download Manager                                     "
+        product-version="${version}                                             " />
+      <include path="MisterDownloadManager-*-setup*.exe" min-matches="0"
+        product-name="Mister Download Manager                                     "
+        product-version="${version}                                             " />
       <for-each>
         <authenticode-sign />
       </for-each>

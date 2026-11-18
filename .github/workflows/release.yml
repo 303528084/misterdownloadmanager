@@ -180,6 +180,9 @@ jobs:
           # product-version): the programs (crates/app/build.rs, tools/build/version_info.rs)
           # and the installer and its uninstaller (mdm.iss) take it from Cargo.toml.
           $v = [regex]::Match((Get-Content Cargo.toml -Raw), '(?m)^version\s*=\s*"([^"]+)"').Groups[1].Value
+          # The installer and its uninstaller carry it padded to Inno Setup's fixed width, and
+          # .signpath/artifact-configuration.xml expects that padding for a 5-character version.
+          if ($v.Length -ne 5) { throw "version $v is not 5 characters: update the padding in .signpath/artifact-configuration.xml (and SignPath's copy) first" }
           "version=$v" >> $env:GITHUB_OUTPUT
 
       - name: Installer and portable zip
