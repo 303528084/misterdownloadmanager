@@ -569,6 +569,13 @@ Bug fixes from the first days of 0.5.0, a Safari extension, and more file types.
 
 These ship in the next version.
 
+- ✅ Alt+click on a link behind a site's bot check (Cloudflare's "Just a moment...") opens it in
+  the tab, so the browser passes the check and keeps the file: Chromium browsers and Safari saved
+  the check's page instead ([#1494](https://github.com/anefzaoui/misterdownloadmanager/issues/1494))
+- ✅ The browser-like connection's `sec-ch-ua` names the browser's own version when it is newer
+  than the newest profile MDM has, its request's priority and Accept-Encoding are Chrome's, and
+  the User-Agent goes once
+  ([#1494](https://github.com/anefzaoui/misterdownloadmanager/issues/1494))
 - ✅ Small windows (About, Tell a friend, Speed Limiter settings, Keys and the others) are exactly
   as large as their content at every display scale and interface size, with no scroll bars over
   their buttons ([#1495](https://github.com/anefzaoui/misterdownloadmanager/issues/1495))
@@ -1676,8 +1683,14 @@ These ship in a later version, when they're ready.
   without Download File Info still wait for it (follows
   [#743](https://github.com/anefzaoui/misterdownloadmanager/issues/743))
 - 🔍 A site's bot check refusing MDM's request (testfile.org, a Cloudflare challenge): the
-  message now says so ([#376](https://github.com/anefzaoui/misterdownloadmanager/issues/376)); a
-  way to hand the download back to the browser is still to decide
+  message now says so ([#376](https://github.com/anefzaoui/misterdownloadmanager/issues/376)), and
+  Alt+click on the link leaves it to the browser, which passes the check
+  ([#1494](https://github.com/anefzaoui/misterdownloadmanager/issues/1494)); a way to hand back a
+  download that wasn't started from a link (a pasted address) is still to decide
+- 🔍 The browser-like connection's handshake is Chrome 149's, the newest its library has
+  released; Chrome 150 and later add signature algorithms and an extension to theirs, which come
+  with the library's next release
+  ([#1494](https://github.com/anefzaoui/misterdownloadmanager/issues/1494))
 - 🔍 The window not answering for up to half a minute just after the computer wakes, while MDM
   waits in the notification area ([#574](https://github.com/anefzaoui/misterdownloadmanager/issues/574),
   [#613](https://github.com/anefzaoui/misterdownloadmanager/issues/613),
