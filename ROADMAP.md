@@ -564,6 +564,10 @@ Bug fixes from the first days of 0.5.0, a Safari extension, and more file types.
 
 These ship in the next version.
 
+- ✅ Video qualities say the file and the codec that downloads (`1080p MP4 · AV1 · 60 fps`): in
+  the Download video window, the menu over a video and `video-info`; "MP4" alone read as H.264.
+  A line whose very stream is gone takes the nearest of its codec first
+  ([#1465](https://github.com/anefzaoui/misterdownloadmanager/issues/1465))
 - ✅ A download the browser handed over is never called complete with an answer no larger than a
   web page where the browser's file was larger than any (a JSON or text error, an empty answer):
   it stops before anything is saved, says both sizes and suggests Alt+click; where the browser's
