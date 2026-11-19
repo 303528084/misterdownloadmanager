@@ -693,6 +693,104 @@
       own: (u) => /^\/(?:video|note)\/\d{15,22}(?:[/?#]|$)/.test(u.pathname),
       opened: (u) => (/^\d{15,22}$/.test(u.searchParams.get("modal_id") || "") ? `https://www.douyin.com/video/${u.searchParams.get("modal_id")}` : null),
     },
+    {
+      // Google Drive videos played in shared folders or direct preview (#758).
+      // The stream's own driveid/docid query parameter names the file; otherwise,
+      // fallback to links or iframes inside the preview dialog that holds the player.
+      hosts: /^(?:drive|docs)\.google\.com$/,
+      embed: (u) => /^\/(?:u\/\d+\/)?file\/d\/[\w-]{25,}\/preview\b/.test(u.pathname),
+      read(node, url) {
+        const sure = new Map();
+        const maybe = new Map();
+        const file = (id, targetMap = sure) => {
+          if (!/^[\w-]{25,}$/.test(id || "")) return;
+          const user = /^\/drive\/(u\/\d+)\//.exec(url.pathname) || /^\/(u\/\d+)\//.exec(url.pathname);
+          const prefix = user ? `/${user[1]}` : "";
+          targetMap.set(id, `https://drive.google.com${prefix}/file/d/${id}/view`);
+        };
+
+        // 1. Take the playing <video>'s own driveid or docid first and stop there.
+        if (node.localName === "video") {
+          const src = node.currentSrc || (node.getAttribute && node.getAttribute("src")) || "";
+          const m = /[?&](?:driveid|docid)=([\w-]{25,})/.exec(src);
+          if (m) {
+            file(m[1], sure);
+            return { sure, maybe };
+          }
+        }
+
+        // An iframe or embed directly playing the video (e.g. YouTube embed player on Drive).
+        if (node.localName === "iframe" || node.localName === "embed") {
+          const src = (node.getAttribute && node.getAttribute("src")) || "";
+          let m = /\/file\/d\/([\w-]{25,})/.exec(src) || /[?&](?:id|driveid|docid)=([\w-]{25,})/.exec(src);
+          if (m && /^[\w-]{25,}$/.test(m[1])) {
+            file(m[1], sure);
+            return { sure, maybe };
+          }
+        }
+
+        // A player container element directly carrying data-doc-id (used by Google Drive viewer
+        // in both signed-in and signed-out states) or data-id for this file.
+        const docId = (node.getAttribute && (node.getAttribute("data-doc-id") || node.getAttribute("data-id"))) || "";
+        if (/^[\w-]{25,}$/.test(docId) && !docId.startsWith("ucc-") && docId !== "_gd") {
+          file(docId, sure);
+          return { sure, maybe };
+        }
+
+        // 2. Fall back to links or iframes only inside the preview dialog that holds the player
+        // (not the folder list), and never to generic data-* attributes.
+        const isDialog =
+          (node.getAttribute && node.getAttribute("role") === "dialog") ||
+          (node.getAttribute && node.getAttribute("aria-modal") === "true") ||
+          /\b(?:preview-dialog|modal|dialog)\b/i.test((node.getAttribute && node.getAttribute("class")) || "");
+
+        if (isDialog) {
+          const candidates = new Set();
+          for (const { u } of linksIn(node)) {
+            if (!/(^|\.)(?:drive|docs)\.google\.com$/.test(u.hostname)) continue;
+            let m = /^\/(?:u\/\d+\/)?file\/d\/([\w-]{25,})/.exec(u.pathname);
+            if (m) candidates.add(m[1]);
+            else if (/^\/(?:u\/\d+\/)?(?:uc|open)$/.test(u.pathname)) {
+              const id = u.searchParams.get("id");
+              if (id && /^[\w-]{25,}$/.test(id)) candidates.add(id);
+            }
+          }
+          for (const el of node.querySelectorAll ? node.querySelectorAll("iframe, embed") : []) {
+            const src = (el.getAttribute && el.getAttribute("src")) || "";
+            let m = /\/file\/d\/([\w-]{25,})/.exec(src) || /[?&](?:id|driveid|docid)=([\w-]{25,})/.exec(src);
+            if (m && /^[\w-]{25,}$/.test(m[1])) candidates.add(m[1]);
+          }
+          for (const el of node.querySelectorAll ? node.querySelectorAll("[data-doc-id]") : []) {
+            const id = el.getAttribute && el.getAttribute("data-doc-id");
+            if (id && /^[\w-]{25,}$/.test(id)) candidates.add(id);
+          }
+
+          // 3. With more than one candidate left, return them as maybe, not sure.
+          if (candidates.size === 1) {
+            file([...candidates][0], sure);
+          } else if (candidates.size > 1) {
+            for (const id of candidates) file(id, maybe);
+          }
+        }
+
+        // 4. Same-origin top window fallback: in Google Drive viewer iframe, inspect top frame's selected row.
+        if (!sure.size && !maybe.size && typeof window !== "undefined" && window !== window.top) {
+          try {
+            const topDoc = window.top.document;
+            const sel = topDoc?.querySelector?.('[role="row"][aria-selected="true"][data-id], [data-id][aria-selected="true"]');
+            const id = sel?.getAttribute?.("data-id");
+            if (id && /^[\w-]{25,}$/.test(id)) file(id, sure);
+          } catch {
+            // Cross-origin top window.
+          }
+        }
+
+        return { sure, maybe };
+      },
+      own: (u) =>
+        /^\/(?:u\/\d+\/)?file\/d\/[\w-]{25,}/.test(u.pathname) ||
+        (/^\/(?:u\/\d+\/)?(?:uc|open)$/.test(u.pathname) && /^[\w-]{25,}$/.test(u.searchParams.get("id") || "")),
+    },
   ];
   // ---- the video's own address: end.
 
@@ -1470,11 +1568,22 @@ button:focus-visible { outline: none; }
     return s.visibility !== "hidden" && s.display !== "none" && Number(s.opacity) > 0.05;
   }
 
+  function siteVideos() {
+    if (typeof location !== "undefined" && /(^|\.)(?:drive|docs)\.google\.com$/.test(location.hostname)) {
+      return (
+        document.querySelectorAll?.(
+          "iframe.drive-viewer-video-iframe, iframe.drive-viewer-iframe, iframe.h3t5Od, iframe[src*='/viewer/main'], iframe[src*='youtube.googleapis.com'], iframe[src*='driveid='], iframe[src*='docid=']",
+        ) || []
+      );
+    }
+    return [];
+  }
+
   // The topmost eligible video under (x, y): players lay their controls over the video, so the
   // video itself rarely gets the pointer's events.
   function videoAt(x, y) {
     let best = null;
-    for (const v of [...videos, ...audios, ...shadowVideos()]) {
+    for (const v of [...videos, ...audios, ...shadowVideos(), ...siteVideos()]) {
       const r = v.getBoundingClientRect();
       if (x < r.left || x > r.right || y < r.top || y > r.bottom || !eligible(v)) continue;
       if (!best || r.width * r.height < best.r.width * best.r.height) best = { v, r };
@@ -2332,6 +2441,44 @@ button:focus-visible { outline: none; }
   });
 
   // ---- wiring -----------------------------------------------------------------------------------
+  const isDriveHost = typeof location !== "undefined" && /(^|\.)(?:drive|docs)\.google\.com$/.test(location.hostname);
+  const isDriveTop = typeof window !== "undefined" && window === window.top && isDriveHost;
+  const isDriveViewer =
+    typeof window !== "undefined" &&
+    isDriveHost &&
+    (window === window.top || /\/viewer\/main\b/.test(location.pathname) || /\/file\/d\/[^/]+\/preview/.test(location.pathname));
+  const isDriveFrame =
+    typeof window !== "undefined" &&
+    window !== window.top &&
+    typeof location !== "undefined" &&
+    ((location.hostname === "youtube.googleapis.com" &&
+      (/[?&](?:driveid|docid)=/.test(location.search) || /[?&]ps=docs\b/.test(location.search))) ||
+      (isDriveHost && /\/file\/d\/[^/]+\/preview/.test(location.pathname)));
+
+  let lastFrameMove = 0;
+  function onFrameMove() {
+    const now = Date.now();
+    if (now - lastFrameMove < 80) return;
+    lastFrameMove = now;
+    send({ type: "drive-frame-pointer" });
+  }
+
+  function onDriveFramePointer(m) {
+    if (m && m.type === "drive-frame-pointer") {
+      lastMove = Date.now();
+      if (!video) {
+        const frame = [...siteVideos()].find(eligible);
+        if (frame) {
+          const r = frame.getBoundingClientRect();
+          pointer = { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+          show(frame);
+        }
+      } else if (!pill.classList.contains("shown")) {
+        show(video);
+      }
+    }
+  }
+
   // The extension updated or removed under this page: the button and its listeners go (a fresh
   // copy of this script comes with the new extension).
   function teardown() {
@@ -2341,6 +2488,8 @@ button:focus-visible { outline: none; }
     cancelAnimationFrame(raf);
     cancelAnimationFrame(scan);
     removeEventListener("pointermove", onMove, true);
+    if (isDriveFrame) removeEventListener("pointermove", onFrameMove, true);
+    if (isDriveViewer) ext.runtime?.onMessage?.removeListener(onDriveFramePointer);
     removeEventListener("keydown", onTab, true);
     removeEventListener("loadstart", onLoadStart, true);
     root.remove();
@@ -2349,6 +2498,12 @@ button:focus-visible { outline: none; }
     video = null;
   }
   globalThis.__mdmVideoButton = { alive: () => Boolean(ext.runtime?.id), teardown };
+  if (isDriveFrame) {
+    addEventListener("pointermove", onFrameMove, { capture: true, passive: true });
+  }
+  if (isDriveViewer) {
+    ext.runtime?.onMessage?.addListener(onDriveFramePointer);
+  }
   addEventListener("pointermove", onMove, { capture: true, passive: true });
   addEventListener("pointerdown", (e) => {
     if (menuOpen && !e.composedPath().includes(root)) closeMenu();

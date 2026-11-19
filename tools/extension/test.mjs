@@ -185,6 +185,7 @@ function fakeApi({
       remove: async (id) => calls.push(["closeTab", id]),
       query: async (q) => (q && q.active && activeTab ? [activeTab] : []),
       create: async (t) => calls.push(["openTab", t.url]),
+      sendMessage: async (id, m, opts) => calls.push(["tabMessage", id, m, opts]),
     },
     webRequest: {
       onBeforeRequest: event("beforeRequest"),
@@ -1095,6 +1096,60 @@ const ok = (what) => {
   );
   assert.deepEqual(on, { on: false, compact: false }, "where the app says no");
   ok("video button messages");
+}
+{
+  const { api, calls, listeners } = fakeApi({ firefox: true });
+  load(api, true);
+  const ask = (m, sender) => new Promise((r) => listeners.message(m, sender, (x) => r(JSON.parse(JSON.stringify(x)))));
+
+  // Valid pointer move in a Drive child frame -> forwarded to top frame (frameId 0)
+  const driveSubframe = {
+    id: "ours",
+    url: "https://drive.google.com/file/d/1s52ek_4YTDRt_EOkx1FS53u-vJa0c4nu/preview",
+    frameId: 2,
+    tab: { id: 7, url: "https://drive.google.com/drive/folders/18l2MEarbNGo94E1x0sU2mpfkRmLrVVo3" },
+  };
+  const res1 = await ask({ type: "drive-frame-pointer" }, driveSubframe);
+  assert.deepEqual(res1, { ok: true });
+  assert.ok(
+    calls.some(
+      ([kind, tabId, msg, opts]) =>
+        kind === "tabMessage" && tabId === 7 && msg.type === "drive-frame-pointer" && opts.frameId === 0,
+    ),
+    "forwarded to frameId 0",
+  );
+
+  // Subframe on another website -> rejected, no tabMessage
+  const otherSubframe = {
+    id: "ours",
+    url: "https://other.test/frame",
+    frameId: 2,
+    tab: { id: 7, url: "https://other.test/watch" },
+  };
+  const res2 = await ask({ type: "drive-frame-pointer" }, otherSubframe);
+  assert.deepEqual(res2, { ok: false });
+
+  // Docs subframe that is not a player frame -> rejected
+  const docsSubframe = {
+    id: "ours",
+    url: "https://docs.google.com/document/d/1s52ek_4YTDRt_EOkx1FS53u-vJa0c4nu/edit",
+    frameId: 2,
+    tab: { id: 7, url: "https://drive.google.com/drive/folders/18l2MEarbNGo94E1x0sU2mpfkRmLrVVo3" },
+  };
+  const resDocs = await ask({ type: "drive-frame-pointer" }, docsSubframe);
+  assert.deepEqual(resDocs, { ok: false });
+
+  // Top-level frame (frameId 0) -> rejected
+  const topFrame = {
+    id: "ours",
+    url: "https://drive.google.com/drive/folders/18l2MEarbNGo94E1x0sU2mpfkRmLrVVo3",
+    frameId: 0,
+    tab: { id: 7, url: "https://drive.google.com/drive/folders/18l2MEarbNGo94E1x0sU2mpfkRmLrVVo3" },
+  };
+  const res3 = await ask({ type: "drive-frame-pointer" }, topFrame);
+  assert.deepEqual(res3, { ok: false });
+
+  ok("#758: background forwards frame pointer exclusively for Drive subframes to frameId 0");
 }
 
 // The button's qualities: an app whose rules say it looks videos up (`videoLookup`, kept with the
@@ -2290,9 +2345,135 @@ function samplePage(html) {
   ok("video.js: Shorts and live pages name their video");
 }
 
+// #758: Google Drive videos played in shared folders or direct file pages.
+{
+  const testDrive = (href, { parentAttrs = {}, links = [], iframes = [], src = "" } = {}) => {
+    const el = {
+      localName: "video",
+      currentSrc: src,
+      parentElement: null,
+      getAttribute: () => null,
+      querySelectorAll: () => [],
+    };
+    const parent = {
+      localName: "div",
+      parentElement: null,
+      getAttribute: (k) => parentAttrs[k] || null,
+      querySelectorAll: (sel) => {
+        if (sel === "a[href]") {
+          return links.map((h) => ({
+            localName: "a",
+            getAttribute: (k) => (k === "href" ? h : null),
+            querySelector: () => null,
+          }));
+        }
+        if (sel === "iframe, embed") {
+          return iframes.map((s) => ({
+            localName: "iframe",
+            getAttribute: (k) => (k === "src" ? s : null),
+          }));
+        }
+        if (sel === "[data-doc-id]") {
+          return parentAttrs["data-doc-id"]
+            ? [{ localName: "div", getAttribute: (k) => (k === "data-doc-id" ? parentAttrs["data-doc-id"] : null) }]
+            : [];
+        }
+        return [];
+      },
+    };
+    el.parentElement = parent;
+    const document = { querySelector: () => null, querySelectorAll: () => [el] };
+    return videoPageOn(new URL(href), document)(el);
+  };
+
+  // Direct file URL returns the file's own page.
+  assert.equal(
+    testDrive("https://drive.google.com/file/d/1s52ek_4YTDRt_EOkx1FS53u-vJa0c4nu/view"),
+    "https://drive.google.com/file/d/1s52ek_4YTDRt_EOkx1FS53u-vJa0c4nu/view",
+  );
+
+  // Video in a shared folder with stream URL carrying driveid: picked first.
+  assert.equal(
+    testDrive("https://drive.google.com/drive/folders/18l2MEarbNGo94E1x0sU2mpfkRmLrVVo3", {
+      src: "https://rr1---sn-4g5ednss.googlevideo.com/videoplayback?expire=123&driveid=1s52ek_4YTDRt_EOkx1FS53u-vJa0c4nu",
+    }),
+    "https://drive.google.com/file/d/1s52ek_4YTDRt_EOkx1FS53u-vJa0c4nu/view",
+  );
+
+  // Video in a shared folder with preview dialog holding one link: falls back to dialog's link.
+  assert.equal(
+    testDrive("https://drive.google.com/drive/folders/18l2MEarbNGo94E1x0sU2mpfkRmLrVVo3", {
+      parentAttrs: { role: "dialog" },
+      links: ["https://drive.google.com/file/d/1s52ek_4YTDRt_EOkx1FS53u-vJa0c4nu/view"],
+    }),
+    "https://drive.google.com/file/d/1s52ek_4YTDRt_EOkx1FS53u-vJa0c4nu/view",
+  );
+
+  // Video in a shared folder with preview dialog holding one iframe.
+  assert.equal(
+    testDrive("https://drive.google.com/drive/folders/18l2MEarbNGo94E1x0sU2mpfkRmLrVVo3", {
+      parentAttrs: { role: "dialog" },
+      iframes: ["https://drive.google.com/file/d/1s52ek_4YTDRt_EOkx1FS53u-vJa0c4nu/preview"],
+    }),
+    "https://drive.google.com/file/d/1s52ek_4YTDRt_EOkx1FS53u-vJa0c4nu/view",
+  );
+
+  // Video in signed-out Google Drive viewer: player container carrying data-doc-id.
+  assert.equal(
+    testDrive("https://drive.google.com/viewer/main?origin=https://drive.google.com&source=10", {
+      parentAttrs: { "data-doc-id": "1s52ek_4YTDRt_EOkx1FS53u-vJa0c4nu" },
+    }),
+    "https://drive.google.com/file/d/1s52ek_4YTDRt_EOkx1FS53u-vJa0c4nu/view",
+  );
+
+  // Video in preview dialog with data-doc-id inside dialog element.
+  assert.equal(
+    testDrive("https://drive.google.com/drive/folders/18l2MEarbNGo94E1x0sU2mpfkRmLrVVo3", {
+      parentAttrs: { role: "dialog", "data-doc-id": "1s52ek_4YTDRt_EOkx1FS53u-vJa0c4nu" },
+    }),
+    "https://drive.google.com/file/d/1s52ek_4YTDRt_EOkx1FS53u-vJa0c4nu/view",
+  );
+
+  // Links outside a preview dialog (in the folder list) are ignored.
+  assert.equal(
+    testDrive("https://drive.google.com/drive/folders/18l2MEarbNGo94E1x0sU2mpfkRmLrVVo3", {
+      parentAttrs: { role: "grid" },
+      links: ["https://drive.google.com/file/d/1s52ek_4YTDRt_EOkx1FS53u-vJa0c4nu/view"],
+    }),
+    null,
+  );
+
+  // More than one candidate in preview dialog returns null (maybe, not sure).
+  assert.equal(
+    testDrive("https://drive.google.com/drive/folders/18l2MEarbNGo94E1x0sU2mpfkRmLrVVo3", {
+      parentAttrs: { role: "dialog" },
+      links: [
+        "https://drive.google.com/file/d/1s52ek_4YTDRt_EOkx1FS53u-vJa0c4nu/view",
+        "https://drive.google.com/file/d/2t63fk_5ZUERu_FPlx2GT64v-wKb1d5ov/view",
+      ],
+    }),
+    null,
+  );
+
+  // Shared folder without any video file identification returns null (never the folder itself).
+  assert.equal(
+    testDrive("https://drive.google.com/drive/folders/18l2MEarbNGo94E1x0sU2mpfkRmLrVVo3"),
+    null,
+  );
+
+  // Test page: a folder list with two files and one playing in the preview dialog.
+  const { page: gdrivePage, videos: gdriveVideos } = samplePage(readText(new URL("google-drive.html", import.meta.url)));
+  for (const v of gdriveVideos) {
+    const expect = v.getAttribute("data-expect");
+    assert.equal(videoPageOn(new URL(gdrivePage), v.ownerDocument)(v), expect === "none" ? null : expect);
+  }
+
+  ok("#758: Google Drive videos in shared folders name the file, never the folder");
+}
+
 // #670: video.js's button against a fake DOM — whether it shows over a video while the page is
 // in full screen, with the popup's option off (as installed) or on.
-function videoButton({ stored = {} } = {}) {
+function videoButton({ stored = {}, location, iframes, videos, subframe = false } = {}) {
   const source = readText("../../extension/video.js");
   const handlers = {};
   // The frames asked for, by id: one cancelled since (a tick after a hide) does not run.
@@ -2384,9 +2565,20 @@ function videoButton({ stored = {} } = {}) {
   const doc = {
     title: "A video",
     createElement: (tag) => node(tag),
-    getElementsByTagName: (tag) => (tag === "video" ? [video] : []),
+    getElementsByTagName: (tag) => (tag === "video" ? (videos !== undefined ? videos : [video]) : []),
     querySelector: () => null,
-    querySelectorAll: () => [],
+    querySelectorAll: (sel) => {
+      if (iframes && sel.includes("iframe")) {
+        return iframes.filter((el) => {
+          if (sel.includes("drive-viewer-video-iframe") && el.classList.contains("drive-viewer-video-iframe")) return true;
+          if (sel.includes("youtube.googleapis.com") && el.src.includes("youtube.googleapis.com")) return true;
+          if (sel.includes("driveid=") && el.src.includes("driveid=")) return true;
+          if (sel.includes("docid=") && el.src.includes("docid=")) return true;
+          return false;
+        });
+      }
+      return [];
+    },
     documentElement,
     elementsFromPoint: () => [],
     activeElement: null,
@@ -2409,10 +2601,18 @@ function videoButton({ stored = {} } = {}) {
       onChanged: { addListener: (f) => storageListeners.push(f) },
     },
   };
+  const loc = { hostname: "vid.test", href: "https://vid.test/watch", search: "", pathname: "/watch", ...location };
+  const win = {
+    top: null,
+    location: loc,
+    document: doc,
+  };
+  win.top = subframe ? {} : win;
   class HTMLAudioElement {}
   vm.runInNewContext(source, {
     browser: api,
-    location: { hostname: "vid.test", href: "https://vid.test/watch" },
+    location: loc,
+    window: win,
     document: doc,
     matchMedia: () => ({ matches: false, addEventListener() {} }),
     getComputedStyle: () => ({ visibility: "visible", display: "block", opacity: "1" }),
@@ -2459,6 +2659,7 @@ function videoButton({ stored = {} } = {}) {
       for (const f of storageListeners) f({ hideVideoFullscreen: { newValue: value } }, "local");
       await settle();
     },
+    hasFramePointer: () => Boolean((handlers.pointermove || []).some((f) => f.name === "onFrameMove")),
   };
 }
 {
@@ -2508,6 +2709,87 @@ function videoButton({ stored = {} } = {}) {
   await b.move();
   assert.equal(b.display(), "block", "turned off in full screen: the button comes back");
   ok("#670: turning the option on and off while in full screen");
+}
+{
+  // #758: on docs.google.com / drive.google.com, non-video preview frames (Docs, Sheets) must not get the button.
+  const docFrame = {
+    localName: "iframe",
+    id: "doc-preview",
+    src: "https://docs.google.com/document/d/1s52ek_4YTDRt_EOkx1FS53u-vJa0c4nu/preview",
+    classList: { contains: () => false },
+    isConnected: true,
+    muted: false,
+    loop: false,
+    controls: false,
+    duration: 0,
+    getBoundingClientRect: () => ({ left: 0, top: 0, right: 640, bottom: 360, width: 640, height: 360 }),
+  };
+  const bDoc = videoButton({
+    location: { hostname: "docs.google.com", href: "https://docs.google.com/document/d/1s52ek_4YTDRt_EOkx1FS53u-vJa0c4nu/preview" },
+    videos: [],
+    iframes: [docFrame],
+  });
+  await bDoc.move();
+  assert.notEqual(bDoc.display(), "block", "a non-video preview frame on docs.google.com does not get the button");
+
+  // A Google Drive video player frame gets the button.
+  const videoFrame = {
+    localName: "iframe",
+    src: "https://youtube.googleapis.com/embed/abc?driveid=1s52ek_4YTDRt_EOkx1FS53u-vJa0c4nu",
+    classList: { contains: (c) => c === "drive-viewer-video-iframe" },
+    isConnected: true,
+    muted: false,
+    loop: false,
+    controls: false,
+    duration: 0,
+    getBoundingClientRect: () => ({ left: 0, top: 0, right: 640, bottom: 360, width: 640, height: 360 }),
+  };
+  const bVideo = videoButton({
+    location: { hostname: "drive.google.com", href: "https://drive.google.com/drive/folders/18l2MEarbNGo94E1x0sU2mpfkRmLrVVo3" },
+    videos: [],
+    iframes: [videoFrame],
+  });
+  await bVideo.move();
+  assert.equal(bVideo.display(), "block", "the video player frame on drive.google.com gets the button");
+  ok("#758: non-video preview frame never gets the button, video player frame does");
+
+  // #758: only the player's own subframe sets isDriveFrame, never docs/sheets subframes
+  const playerYt = videoButton({
+    location: { hostname: "youtube.googleapis.com", href: "https://youtube.googleapis.com/embed/abc?driveid=1s52ek", search: "?driveid=1s52ek", pathname: "/embed/abc" },
+    subframe: true,
+  });
+  assert.equal(playerYt.hasFramePointer(), true, "youtube embed with driveid registers frame pointer");
+
+  const playerYtDoc = videoButton({
+    location: { hostname: "youtube.googleapis.com", href: "https://youtube.googleapis.com/embed/abc?docid=1s52ek", search: "?docid=1s52ek", pathname: "/embed/abc" },
+    subframe: true,
+  });
+  assert.equal(playerYtDoc.hasFramePointer(), true, "youtube embed with docid registers frame pointer");
+
+  const playerPreview = videoButton({
+    location: { hostname: "drive.google.com", href: "https://drive.google.com/file/d/1s52ek/preview", search: "", pathname: "/file/d/1s52ek/preview" },
+    subframe: true,
+  });
+  assert.equal(playerPreview.hasFramePointer(), true, "Drive /file/d/.../preview registers frame pointer");
+
+  const docsSubframe = videoButton({
+    location: { hostname: "docs.google.com", href: "https://docs.google.com/document/d/1s52ek/edit", search: "", pathname: "/document/d/1s52ek/edit" },
+    subframe: true,
+  });
+  assert.equal(docsSubframe.hasFramePointer(), false, "Docs subframe does not register frame pointer");
+
+  const sheetsSubframe = videoButton({
+    location: { hostname: "docs.google.com", href: "https://docs.google.com/spreadsheets/d/1s52ek/edit", search: "", pathname: "/spreadsheets/d/1s52ek/edit" },
+    subframe: true,
+  });
+  assert.equal(sheetsSubframe.hasFramePointer(), false, "Sheets subframe does not register frame pointer");
+
+  const folderSubframe = videoButton({
+    location: { hostname: "drive.google.com", href: "https://drive.google.com/drive/folders/18l2MEarb", search: "", pathname: "/drive/folders/18l2MEarb" },
+    subframe: true,
+  });
+  assert.equal(folderSubframe.hasFramePointer(), false, "Folder subframe does not register frame pointer");
+  ok("#758: pointer bridge only triggers on player subframe, not Docs or Sheets");
 }
 
 // The qualities' menu (video.js; its plain functions run here): the questions' pace and their

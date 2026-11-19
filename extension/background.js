@@ -2969,6 +2969,10 @@ function playingAt(x, y) {
 }
 
 const isYouTube = (url) => /(^|\.)(youtube\.com|youtube-nocookie\.com|youtu\.be)$/i.test(siteOf(url));
+const isDrive = (url) => /(^|\.)(?:drive|docs)\.google\.com$/i.test(siteOf(url));
+const isDriveFile = (url) =>
+  /\/file\/d\/[\w-]{25,}/.test(url) ||
+  (/\/(?:uc|open)\b/.test(url) && /[?&]id=[\w-]{25,}/.test(url));
 
 // The watch address of what the player at `at` (the video's middle, in the sender's frame) plays,
 // or "": a page without such a player, one too old for `world`, a page extensions may not read.
@@ -3011,6 +3015,11 @@ async function videoAddress(m, page, sender) {
   if (isYouTube(page)) {
     const playing = await playingVideo(sender, m.at);
     return playing || (isYouTube(named) ? named : "");
+  }
+  if (isDrive(page)) {
+    if (isDriveFile(named)) return named;
+    if (isDriveFile(page)) return page;
+    return "";
   }
   if (m.url === null) return "";
   return named && siteKey(named) === siteKey(page) ? named : page;
@@ -3150,6 +3159,28 @@ const beside = (tab) => ({
 async function pageMessage(m, sender) {
   const page = senderPage(sender);
   const tab = sender.tab || {};
+  // #758: on Google Drive, pointer movement inside a player's subframe informs the top frame
+  // so the floating button stays visible while hovering over the cross-origin player.
+  if (m.type === "drive-frame-pointer") {
+    const tabId = tab.id;
+    const tabUrl = tab.url || "";
+    const senderUrl = sender.url || "";
+    const isPlayer =
+      (/(^|\.)youtube\.googleapis\.com$/i.test(siteOf(senderUrl)) &&
+        (/[?&](?:driveid|docid)=/.test(senderUrl) || /[?&]ps=docs\b/.test(senderUrl))) ||
+      (isDrive(senderUrl) && (/\/file\/d\/[^/]+\/preview/.test(senderUrl) || /\/viewer\/main\b/.test(senderUrl)));
+    if (
+      Number.isInteger(tabId) &&
+      Number.isInteger(sender.frameId) &&
+      sender.frameId !== 0 &&
+      isDrive(tabUrl) &&
+      isPlayer
+    ) {
+      ext.tabs.sendMessage(tabId, { type: "drive-frame-pointer" }, { frameId: 0 }).catch(() => {});
+      return { ok: true };
+    }
+    return { ok: false };
+  }
   if (m.type === "panel") {
     const top = tab.url && /^https?:/i.test(tab.url) ? tab.url : "";
     return page ? await panelOn(page, top) : { on: false, compact: false };

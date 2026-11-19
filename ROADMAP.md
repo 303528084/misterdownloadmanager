@@ -604,6 +604,10 @@ These ship in the next version.
 - ✅ Your own yt-dlp config file: Options → Sites Logins → Use my yt-dlp config file (off by
   default) lets yt-dlp read it for the app's videos, most of MDM's own choices still winning; an
   external downloader it names doesn't stop the progress
+- ✅ Videos in Google Drive shared folders: the Download video button reads the file's ID from
+  the player's stream or preview dialog, and MDM downloads the file directly through its Google
+  Drive segmented engine instead of failing on the folder address
+  ([#758](https://github.com/anefzaoui/misterdownloadmanager/issues/758))
 - ✅ Download File Info: a name typed in **Save as** that is a file already there asks first
   (the duplicate question: a numbered name, or overwrite it, replaced only once the download
   completes), instead of numbering it without a word
