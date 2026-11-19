@@ -564,6 +564,8 @@ Bug fixes from the first days of 0.5.0, a Safari extension, and more file types.
 
 These ship in the next version.
 
+- ✅ The browser extension remembers paired servers and switches between them and this computer
+  with a click without re-pairing (thanks to [@kngkatak](https://github.com/kngkatak))
 - ✅ Video qualities say the file and the codec that downloads (`1080p MP4 · AV1 · 60 fps`): in
   the Download video window, the menu over a video and `video-info`; "MP4" alone read as H.264.
   A line whose very stream is gone takes the nearest of its codec first
