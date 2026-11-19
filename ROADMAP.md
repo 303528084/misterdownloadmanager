@@ -564,6 +564,11 @@ Bug fixes from the first days of 0.5.0, a Safari extension, and more file types.
 
 These ship in the next version.
 
+- ✅ A download the browser handed over is never called complete with an answer no larger than a
+  web page where the browser's file was larger than any (a JSON or text error, an empty answer):
+  it stops before anything is saved, says both sizes and suggests Alt+click; where the browser's
+  own download ended is asked once first
+  ([#1460](https://github.com/anefzaoui/misterdownloadmanager/issues/1460))
 - ✅ A live stream that is recording is saved when it is stopped: the progress window says
   **Recording...** with **Downloaded** and **Transfer rate** following the recording's size, its
   pause button reads **Stop and save**, and Stop, Stop All, a queue's stop and the phone page's
