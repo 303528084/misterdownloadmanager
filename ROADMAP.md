@@ -564,6 +564,9 @@ Bug fixes from the first days of 0.5.0, a Safari extension, and more file types.
 
 These ship in the next version.
 
+- ✅ Your own yt-dlp config file: Options → Sites Logins → Use my yt-dlp config file (off by
+  default) lets yt-dlp read it for the app's videos, most of MDM's own choices still winning; an
+  external downloader it names doesn't stop the progress
 - ✅ Download File Info: a name typed in **Save as** that is a file already there asks first
   (the duplicate question: a numbered name, or overwrite it, replaced only once the download
   completes), instead of numbering it without a word
