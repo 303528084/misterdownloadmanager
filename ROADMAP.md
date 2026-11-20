@@ -569,6 +569,9 @@ Bug fixes from the first days of 0.5.0, a Safari extension, and more file types.
 
 These ship in the next version.
 
+- ✅ A video download, look-up, playlist or gallery finishes when yt-dlp (or gallery-dl) does:
+  a program it started that still held its output open kept the download running at its last
+  progress ([#1521](https://github.com/anefzaoui/misterdownloadmanager/issues/1521))
 - ✅ The browser add-on's popup lists MDM's newest downloads, live while it is open: the system's
   own icon for each file type, its progress, speed and time left, search and filters (running,
   done, failed), and on each one **Open**, **Show in folder**, **Pause** / **Resume**, **Copy
