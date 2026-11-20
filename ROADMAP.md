@@ -569,6 +569,10 @@ Bug fixes from the first days of 0.5.0, a Safari extension, and more file types.
 
 These ship in the next version.
 
+- ✅ The proxy reaches yt-dlp: Options' automatic configuration script is asked about the
+  video's page for every yt-dlp run, "Use system settings" follows Windows' setup script (a
+  proxy program's PAC mode), and a manual proxy chosen with no protocol ticked gets http and
+  https ticked ([#1448](https://github.com/anefzaoui/misterdownloadmanager/issues/1448))
 - ✅ A video download, look-up, playlist or gallery finishes when yt-dlp (or gallery-dl) does:
   a program it started that still held its output open kept the download running at its last
   progress ([#1521](https://github.com/anefzaoui/misterdownloadmanager/issues/1521))
@@ -1710,6 +1714,10 @@ These ship in a later version, when they're ready.
 
 ### Bugs being looked into
 
+- 🔍 The system's automatic proxy settings beyond Windows' setup script: Windows'
+  "Automatically detect settings" (WPAD), and the automatic configuration scripts of Linux
+  desktops and macOS, aren't read yet
+  ([#1448](https://github.com/anefzaoui/misterdownloadmanager/issues/1448))
 - 🔍 Linux on native Wayland: while the main window is out of sight (on another workspace), the
   other windows (Download File Info, Download complete, the dialogs) don't open or don't answer
   until it is shown again, as the compositor doesn't let a window it isn't showing redraw and
