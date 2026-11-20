@@ -569,6 +569,9 @@ Bug fixes from the first days of 0.5.0, a Safari extension, and more file types.
 
 These ship in the next version.
 
+- ✅ The command line's downloads, look-ups, helper installs and torrents go through Options →
+  Proxy / Socks (and its network adapter and DNS) as the app's do, with a `--proxy` switch for
+  one run ([#1556](https://github.com/anefzaoui/misterdownloadmanager/issues/1556))
 - ✅ SOCKS5 and SOCKS4 as a real choice in Options → Proxy / Socks: a **Type** (HTTP, HTTPS,
   SOCKS5, SOCKS4), site names looked up through the proxy (on by default), a SOCKS5 login, Get
   System reading Windows' SOCKS proxy, a **Test** button; every connection follows it: downloads
