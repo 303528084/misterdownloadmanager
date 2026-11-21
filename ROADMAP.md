@@ -569,6 +569,11 @@ Bug fixes from the first days of 0.5.0, a Safari extension, and more file types.
 
 These ship in the next version.
 
+- ✅ Windows: Simplified Chinese drawn with a Chinese font on every Windows, no longer as boxes
+  where Microsoft YaHei's usual file is missing (Windows 7's `msyh.ttf`, DengXian, SimSun and
+  SimHei are looked for too, a Chinese font must have its language's own characters, the Chinese
+  fonts come before the Japanese ones for every Chinese character, a font per character), and
+  the log names the font ([#1605](https://github.com/anefzaoui/misterdownloadmanager/issues/1605))
 - ✅ Private-window downloads stay in the list by default (Options → General → Keep
   private-window downloads in the list is on for every list that never chose, their cookies
   still never saved): each is marked with a mask before its status, whose tip says whether the
