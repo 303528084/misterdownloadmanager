@@ -582,6 +582,9 @@ These ship in the next version.
   on the server" or falling back to one connection; a file is still never made of two versions,
   and stopped connections no longer say "Connecting..."
   ([#1577](https://github.com/anefzaoui/misterdownloadmanager/issues/1577))
+- ✅ Torrents: Torrent → Files… shows a file ticked later as far as its pieces are, not 100 %,
+  for a torrent out of the session (its saved piece map, as the session counts it)
+  ([#1624](https://github.com/anefzaoui/misterdownloadmanager/issues/1624))
 - ✅ Windows: Simplified Chinese drawn with a Chinese font on every Windows, no longer as boxes
   where Microsoft YaHei's usual file is missing (Windows 7's `msyh.ttf`, DengXian, SimSun and
   SimHei are looked for too, a Chinese font must have its language's own characters, the Chinese
