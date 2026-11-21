@@ -1757,6 +1757,13 @@ These ship in the next version.
   only its number; the same two boxes on the **Scheduler**'s limits page are named too
   ([#1407](https://github.com/anefzaoui/misterdownloadmanager/issues/1407); thanks to
   [@Seyamalam](https://github.com/Seyamalam))
+- ✅ Screen readers name the lists and number boxes that still had none (#1407): the
+  **Accounts**, **Sites Logins** and **Paired devices** lists in Options say what they hold,
+  and the number boxes inside sentences — a queue's **Download N files at the same time**
+  and the Speed Limiter's **KBytes/sec** — are named by the words around them in the
+  translated sentence, in every language
+  ([#1407](https://github.com/anefzaoui/misterdownloadmanager/issues/1407); thanks to
+  [@abivan100-stack](https://github.com/abivan100-stack))
 - ✅ Screen readers read the **Get ready for video downloads** window: its headline, each
   helper's name and description, the status line under the bar and the advice under it
   were painted text a reader never saw (the same banner wherever it heads a window); the
