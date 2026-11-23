@@ -569,6 +569,9 @@ Bug fixes from the first days of 0.5.0, a Safari extension, and more file types.
 
 These ship in the next version.
 
+- ✅ `/exit` from a second launch quits MDM every time, with a dialog open or the main window
+  minimized too, and a link handed over by one is added once, never twice
+  ([#1651](https://github.com/anefzaoui/misterdownloadmanager/issues/1651))
 - ✅ Redownload replaces the finished file under its name once the new copy is complete, as its
   question says, instead of saving `name (1)` beside it; one that fails or is stopped keeps the
   file, and one whose file another program holds keeps both and says so
