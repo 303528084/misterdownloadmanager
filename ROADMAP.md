@@ -1881,6 +1881,14 @@ These ship in the next version.
 - ✅ Dialogs show their file icons while the main window is minimized, and the log no longer
   fills with `Failed to find texture` / `Missing texture` lines, with OpenGL and Direct3D
   ([#1639](https://github.com/anefzaoui/misterdownloadmanager/issues/1639))
+- ✅ Screen readers read a download's progress window: its **Download status** page painted its
+  address and its six rows (status, file size, downloaded with the percentage, transfer rate, time
+  left and resume capability), so only the buttons and the tabs were in the tree; each row is a
+  label named by its caption and carrying its whole value now (never the "..." the page cuts it
+  to), and the page's own progress bar is a value within a range (0–100) that a reader follows
+  without anyone moving the focus
+  ([#1406](https://github.com/anefzaoui/misterdownloadmanager/issues/1406); thanks to
+  [@YairDies](https://github.com/YairDies))
 
 ## Being worked on
 
