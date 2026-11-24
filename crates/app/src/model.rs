@@ -1220,6 +1220,13 @@ impl PrivateMark {
 }
 
 impl Item {
+    /// The folder the download is saved in, as the list's **Save To** column and the preview
+    /// pane's **Save To:** show it: the folder that holds its file (or a torrent's or a
+    /// gallery's own folder).
+    pub fn save_folder(&self) -> &Path {
+        self.dest.parent().unwrap_or(Path::new(""))
+    }
+
     /// Made from a private window's download, in this session or one before it.
     pub fn is_private_window(&self) -> bool {
         self.private_window || self.context.private

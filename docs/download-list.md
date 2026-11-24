@@ -32,15 +32,17 @@ branches and the category or queue you were looking at.
 | **Last Try Date** | When it last ran. |
 | **Added** | When you added it. |
 | **Description** | Your note from **Download File Info** or **Properties**. |
+| **Save To** | The folder the download is saved in (a torrent's or a gallery's own folder is in it). |
 
-- **Sort:** click a column title. Click again to reverse the order, and a third time to go back to the order of addition. **View → Arrange files** does the same from the menu.
+- **Sort:** click a column title. Click again to reverse the order, and a third time to go back to the order of addition. **View → Arrange files** does the same from the menu (**By Save Path** sorts by the **Save To** column's folder).
 - **Move a column:** drag its title sideways.
 - **Resize a column:** drag the line between two titles; double-click it to fit the column to
   its contents.
 - **Choose columns:** right-click any column title and tick the ones you want. **Reset columns**
   in the same menu puts them back as they first were.
 
-MDM remembers the columns, their widths and the sort order.
+MDM remembers the columns, their widths and the sort order. A list from an earlier version gets
+**Save To** at its end; untick it there if you don't want it.
 
 ## Filters
 

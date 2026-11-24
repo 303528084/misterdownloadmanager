@@ -608,6 +608,9 @@ These ship in the next version.
 - ✅ CI and the release take NASM from nasm.us, checked against its pinned SHA256, and use
   Chocolatey's feed only when that download fails (its outage had stopped every Windows build)
 - ✅ Torrents: trackers are checked more carefully.
+- ✅ A **Save To** column in the download list (the folder each download is in), sorted by a click
+  on its title or **View → Arrange files → By Save Path**
+  ([#1827](https://github.com/anefzaoui/misterdownloadmanager/issues/1827))
 - ✅ The download list's downloaded bytes and % move on a steady clock, four times a second,
   whether the mouse moves or not, and the list redraws as it ticks
   ([#1441](https://github.com/anefzaoui/misterdownloadmanager/pull/1441))

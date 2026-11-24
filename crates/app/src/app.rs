@@ -2029,6 +2029,7 @@ fn sort_key(it: &Item, col: usize, queued: bool) -> (f64, String) {
             }),
             String::new(),
         ),
+        list::SAVE_TO => (0.0, it.save_folder().display().to_string().to_lowercase()),
         _ => (0.0, it.description.to_lowercase()),
     }
 }
@@ -2737,6 +2738,8 @@ impl App {
                 it.torrent
                     .as_ref()
                     .map_or(String::new(), |t| model::rate(t.up_speed)),
+                // A path reads left to right in any window, as Explorer's address bar shows it.
+                crate::i18n::ltr(&it.save_folder().display().to_string()),
             ],
             // A short word and a percentage in the cell while checked or joined (#736): the
             // whole words in its tip and for a screen reader.
@@ -10525,7 +10528,7 @@ impl App {
                 by("By &Last Try Date", Some(6)),
                 by("By Date &Added", Some(list::ADDED)),
                 by("By &Description", Some(7)),
-                off("By Save &Path"),
+                by("By Save &Path", Some(list::SAVE_TO)),
                 off("By R&eferer"),
                 off("By Parent &Web Page"),
             ]
