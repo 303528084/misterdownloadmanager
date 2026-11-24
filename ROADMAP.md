@@ -1836,6 +1836,9 @@ These ship in the next version.
   a second or two late while the main window was out of sight (on another workspace)
 - ✅ Telegram Web's downloads stay with the browser, which makes them in the page
   ([#1345](https://github.com/anefzaoui/misterdownloadmanager/issues/1345))
+- ✅ The download button over a video in a tab left open for hours no longer says it can't tell which
+  video it is: its player's new load of the same stream counts as the same video
+  ([#1828](https://github.com/anefzaoui/misterdownloadmanager/issues/1828))
 - ✅ A video in another site's player embedded in a page is named by the page's title, not the
   player's own ("Watch file.mp4 - VOE")
   ([#1351](https://github.com/anefzaoui/misterdownloadmanager/issues/1351))
