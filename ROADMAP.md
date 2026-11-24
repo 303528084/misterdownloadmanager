@@ -569,6 +569,10 @@ Bug fixes from the first days of 0.5.0, a Safari extension, and more file types.
 
 These ship in the next version.
 
+- ✅ LuluStream ([#1593](https://github.com/anefzaoui/misterdownloadmanager/issues/1593)): when
+  the site answers its download form with the form again, MDM waits before sending it back (half
+  a second, then one, two and four seconds) instead of sending its five tries within three
+  seconds, which may be what the site refused
 - ✅ `thunder://`, `flashget://` and `qqdl://` links (#1782): the ordinary address wrapped in
   each (base64) is unwrapped and downloaded, in **Add URL**, in a link copied to the clipboard and
   wherever links are found in text (Add batch download from clipboard, Link grabber, an imported
