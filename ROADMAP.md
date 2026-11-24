@@ -608,6 +608,9 @@ These ship in the next version.
 - ✅ CI and the release take NASM from nasm.us, checked against its pinned SHA256, and use
   Chocolatey's feed only when that download fails (its outage had stopped every Windows build)
 - ✅ Torrents: trackers are checked more carefully.
+- ✅ The download list's downloaded bytes and % move on a steady clock, four times a second,
+  whether the mouse moves or not, and the list redraws as it ticks
+  ([#1441](https://github.com/anefzaoui/misterdownloadmanager/pull/1441))
 - ✅ A quick Ctrl- or Shift-click on a row of the download list or the Scheduler's Files list
   keeps its key on a busy computer: a click has the keys held as its button went down
   ([#1734](https://github.com/anefzaoui/misterdownloadmanager/issues/1734))
