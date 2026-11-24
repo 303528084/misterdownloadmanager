@@ -569,6 +569,9 @@ Bug fixes from the first days of 0.5.0, a Safari extension, and more file types.
 
 These ship in the next version.
 
+- ✅ Torrents: filtering a torrent's trackers never adds one it didn't list (a torrent that
+  repeats its tracker list counts the first only)
+  ([#1805](https://github.com/anefzaoui/misterdownloadmanager/issues/1805))
 - ✅ A preview pane beside the download list (View, the toolbar, Alt+P): the selected download's
   picture (the system's thumbnail, else its type's icon) and details, whether its file is still
   there, resizable, on the left in right-to-left languages
