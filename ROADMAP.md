@@ -569,6 +569,10 @@ Bug fixes from the first days of 0.5.0, a Safari extension, and more file types.
 
 These ship in the next version.
 
+- ✅ A preview pane beside the download list (View, the toolbar, Alt+P): the selected download's
+  picture (the system's thumbnail, else its type's icon) and details, whether its file is still
+  there, resizable, on the left in right-to-left languages
+  ([discussion #1368](https://github.com/anefzaoui/misterdownloadmanager/discussions/1368))
 - ✅ The browser add-on's video button on Facebook's feed sends the video it is over, by the id
   Facebook gives its player (as its /reel/ address), else the video's links in its post, the post's
   permalink last; a comment's link to another video is never taken
