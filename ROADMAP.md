@@ -569,6 +569,12 @@ Bug fixes from the first days of 0.5.0, a Safari extension, and more file types.
 
 These ship in the next version.
 
+- ✅ Torrents: an optional public tracker list (ngosang/trackerslist's best, or an address you
+  give) added to public torrents, those already in the list and those added, fetched once a day
+  (an hour after a failed fetch) through MDM's own downloader, its last good copy kept; never
+  added to private torrents; the command line's `torrent-get` follows it; **Tasks → Torrent
+  settings**, off by default
+  ([#1776](https://github.com/anefzaoui/misterdownloadmanager/issues/1776))
 - ✅ A link signed for the page's IPv4 address no longer fails with 403 over IPv6 (#1660): a
   first request refused with 403 by a host that has addresses of both IP families is asked once
   (one request, no retries) over the other one: the download's, the file's information
