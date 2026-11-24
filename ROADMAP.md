@@ -569,6 +569,9 @@ Bug fixes from the first days of 0.5.0, a Safari extension, and more file types.
 
 These ship in the next version.
 
+- ✅ README and website: SourceForge's badges (its download button, the downloads count and its
+  *Users Love Us* award); the website serves the award's picture itself, so showing it asks
+  SourceForge for nothing
 - ✅ Sinhala, the 87th language: the app, its setup and uninstaller, Sri Lanka's flag,
   Windows' Nirmala UI for its script (machine translated, open to a native speaker's review)
 - ✅ A drive too full for a download says the space needed and the space free right
