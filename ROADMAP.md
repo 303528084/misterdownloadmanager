@@ -569,6 +569,11 @@ Bug fixes from the first days of 0.5.0, a Safari extension, and more file types.
 
 These ship in the next version.
 
+- ✅ Video pieces: a server's announced size is handled more carefully
+- ✅ Download video: a piece that can't be saved fails with the reason
+- ✅ Video playlists: enormous entry numbers no longer break the listing
+- ✅ Download video: absurd announced sizes no longer overflow the total
+- ✅ Galleries: a relative download folder no longer leaves the files to gallery-dl
 - ✅ README and website: SourceForge's badges (its download button, the downloads count and its
   *Users Love Us* award); the website serves the award's picture itself, so showing it asks
   SourceForge for nothing
