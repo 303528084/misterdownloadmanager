@@ -1520,9 +1520,67 @@ button:focus-visible { outline: none; }
     }
     return "";
   }
+  // The stream a page wrote into itself for its player (`html`): an .m3u8 or .mpd address, often
+  // with "\/" for "/". Of several: a master list (it lists every quality), else the one of the
+  // highest quality its address or its entry names ("1080p": …, {label: "1080p", file: …},
+  // 1920x1080, FHD), else the first. "": none.
+  function bestPageStream(html) {
+    const text = String(html);
+    const marks = [...text.matchAll(/https?:\\?\/\\?\/[^"'\s<>]+?\.(?:m3u8|mpd)[^"'\s<>]*/gi)];
+    const found = marks.map((m, i) => {
+      const end = m.index + m[0].length;
+      // Its own entry: the words between it and the links beside it, not past a { or }.
+      const before = text.slice(Math.max(i ? marks[i - 1].index + marks[i - 1][0].length : 0, m.index - 80), m.index);
+      const after = text.slice(end, Math.min(i + 1 < marks.length ? marks[i + 1].index : text.length, end + 80));
+      // "\/", "&" and "&amp;" undone in one pass: each once, never one made by another.
+      const url = m[0].replace(/\\\/|\\u0026|&amp;/gi, (e) => (e === "\\/" ? "/" : "&"));
+      const entry = `${before.split(/[{}]/).pop()} ${after.split(/[{}]/)[0]}`;
+      return { url, height: streamHeight(url) || streamHeight(entry, true) };
+    });
+    const master = found.find((f) => /master/i.test(f.url) && !f.height);
+    if (master) return master.url;
+    return found.reduce((a, b) => (b.height > a.height ? b : a), found[0] || { url: "" }).url;
+  }
+  // The picture height `s` names (an address: 720p, 1280x720; an entry's words, `words`, also
+  // "720": …, quality: 720, FHD). 0: none.
+  function streamHeight(s, words = false) {
+    const m =
+      /(\d{3,4})p(?![a-z0-9])/i.exec(s) ||
+      /\d{3,4}x(\d{3,4})/i.exec(s) ||
+      (words && (/["'](\d{3,4})["']\s*:/.exec(s) || /(?:quality|label|height|res(?:olution)?)\W{0,3}(\d{3,4})(?!\d)/i.exec(s)));
+    if (m) return Number(m[1]);
+    if (!words) return 0;
+    return /\b(?:4k|uhd)\b/i.test(s) ? 2160 : /\b(?:2k|qhd)\b/i.test(s) ? 1440 : /\b(?:fhd|full\s?hd)\b/i.test(s) ? 1080 : 0;
+  }
+  // The stream the page wrote for its video, before it plays (bestPageStream). Only on a page with
+  // one video worth a button: on a feed the page's first stream may be another video's. Read only
+  // as a look-up starts (startLook, pageLook), never as the button follows the pointer or the page
+  // changes; kept a moment per address (reading the page is not free).
+  let pageStreamAt = { t: 0, href: "", url: "" };
+  function pageStream() {
+    const now = Date.now();
+    if (pageStreamAt.href !== location.href || now - pageStreamAt.t > 2000) {
+      const one = [...videos].filter(eligible).length <= 1;
+      // Where pages write it: their scripts (a player's settings) and the player's own attributes.
+      // Never in the button's way: a page it can't read has none.
+      const text = () => {
+        try {
+          return [...document.querySelectorAll("script, video, source, [data-src], [data-hls], [data-video], [data-setup], [data-config]")]
+            .flatMap((e) => (e.localName === "script" ? [e.textContent] : [...(e.attributes || [])].map((a) => a.value)))
+            .join("\n");
+        } catch {
+          return "";
+        }
+      };
+      pageStreamAt = { t: now, href: location.href, url: one ? bestPageStream(text()) : "" };
+    }
+    return pageStreamAt.url;
+  }
   // What the button sends for a video, and its look-up's key: what it plays (its blob:) when
-  // nothing names it (#1092: what the tab played for it may still be offered); none without that.
-  const lookKey = (d) => (d.url === null ? (d.blob ? `played ${d.blob}` : null) : `${d.url} ${d.src}`);
+  // nothing names it (#1092: what the tab played for it may still be offered), else the page (the
+  // stream it wrote for it, read as the look-up starts).
+  const lookKey = (d) =>
+    d.url === null ? (d.blob ? `played ${d.blob}` : d.page ? `page ${location.href}` : null) : `${d.url} ${d.src}`;
   // What download sends for the video now ({v, d, key}), kept a moment (the DOM walk is not free).
   let current = null;
   function describeNow(v) {
@@ -1560,15 +1618,24 @@ button:focus-visible { outline: none; }
     if (!c || !c.key || c.d.drm || (c.d.src && !STREAM.test(c.d.src))) return null;
     const kept = looks.get(c.key);
     if (usable(kept) && !(byUser && kept.state === "busy")) return kept;
+    // Nothing names it and it plays nothing yet: the stream its page wrote for it; none, nothing
+    // to look up.
+    const page = c.d.url === null && !c.d.blob && c.d.page ? pageStream() : "";
+    if (c.d.url === null && !c.d.blob && !page) return null;
     const og = location.href === landedAt ? document.querySelector('meta[property="og:title"]')?.content : "";
-    const asked = { src: c.d.src, title: (og || document.title || "").trim(), url: c.d.url, at: c.d.at };
+    const asked = {
+      src: c.d.src || page,
+      title: (og || document.title || "").trim(),
+      url: c.d.url,
+      at: c.d.at,
+    };
     const l = { state: "pending", at: Date.now(), href: location.href, asked };
     looks.set(c.key, l);
     const alive = () => looks.get(c.key) === l && location.href === l.href;
     // A look-up (`more`: #1092's stream the tab played, in place of the page's) followed until
     // `end`: the background's first answer and the state it came to.
     const lookUp = async (more, end) => {
-      const r = await within(send({ type: "video-lookup", ...asked, ...more }), LOOKUP_MS);
+      const r = await within(send({ type: "video-lookup", ...asked, ...more }), Math.max(1, Math.min(LOOKUP_MS, end - Date.now())));
       let s = replyState(r) || { state: "gone" };
       if (s.state === "pending") {
         s =
@@ -1590,7 +1657,11 @@ button:focus-visible { outline: none; }
       // #1092: the page found nothing (a feed, a post yt-dlp can't read, a site it doesn't
       // know): what the tab played for this video, when something fits it.
       if (playedWanted(s) && alive()) {
-        const p = await playedLook(c.v, lookUp, alive);
+        // Nothing played yet: the stream its page wrote for it, within the same minute (the
+        // look-up ends then, whatever it found).
+        const p =
+          (await playedLook(c.v, lookUp, alive)) ||
+          (!page && c.d.page && alive() ? await pageLook(lookUp, l.at + LOOKUP_MS) : null);
         if (p) {
           if (p.show) l.show = p.show;
           // The page's look-up's words go with it.
@@ -1651,6 +1722,15 @@ button:focus-visible { outline: none; }
     }
     const { r: again, s } = await lookUp({ played: p.url }, Date.now() + LOOKUP_MS);
     return { ...s, played: p.url, ...(again && again.show ? { show: String(again.show) } : {}) };
+  }
+
+  // The stream its page wrote for a video (`pageStream`), looked up as its `src` until `end`: its
+  // qualities. Null unless that found some.
+  async function pageLook(lookUp, end) {
+    const url = pageStream();
+    if (!url || Date.now() >= end) return null;
+    const { r, s } = await lookUp({ src: url }, end);
+    return s && s.state === "ready" ? { ...s, ...(r && r.show ? { show: String(r.show) } : {}) } : null;
   }
 
   // The look-up starts once the button stayed a moment over the same video.
@@ -2170,6 +2250,9 @@ button:focus-visible { outline: none; }
       src: post ? "" : file,
       // What a player fed by the page plays (a MediaSource's blob:): one per video it plays.
       blob: /^blob:/i.test(v.currentSrc || "") ? v.currentSrc : "",
+      // Before it plays (no file, no blob:): the stream its page wrote for it is looked for as
+      // its look-up starts (pageStream), not here: this runs as the button follows the pointer.
+      page: !file && !/^blob:/i.test(v.currentSrc || ""),
       url,
       // The middle of the video: where the background asks the page's own player what it plays.
       at: { x: r.left + r.width / 2, y: r.top + r.height / 2 },

@@ -569,6 +569,10 @@ Bug fixes from the first days of 0.5.0, a Safari extension, and more file types.
 
 These ship in the next version.
 
+- ✅ The browser add-on's video button before the video plays: on a site yt-dlp doesn't read, it
+  looks up the stream address the page wrote for its player (master playlist first, else the best
+  quality named), only addresses the page names, on a page with one video
+  ([#1826](https://github.com/anefzaoui/misterdownloadmanager/issues/1826))
 - ✅ Galleries: file paths are checked more carefully
 - ✅ Command line: a playlist range from 0 or of 0 entries is refused
 - ✅ Command line: a resumed download's speed starts right

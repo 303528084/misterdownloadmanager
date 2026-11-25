@@ -2410,6 +2410,56 @@ function samplePage(html) {
   ok("#1458: Kwai's player: its page named, its own MP4 the click's download");
 }
 
+// A video that hasn't played has no stream yet: the button takes the one its page wrote for the
+// player (video.js bestPageStream), the best quality its address names, escaped "\/" undone. Only
+// what the page names: no address is guessed.
+{
+  const source = readText("../../extension/video.js");
+  const cut = (name) => {
+    const at = source.indexOf(`  function ${name}(`);
+    return source.slice(at, source.indexOf("\n  }\n", at) + 4);
+  };
+  assert.ok(!/1080"\s*\+|higherStream/.test(source), "no guessed address (a 1080p beside a 720p)");
+  const bestPageStream = new Function(`${cut("bestPageStream")}${cut("streamHeight")}\nreturn bestPageStream;`)();
+  // The quality named beside the link, not in it; a master list (every quality) over them all.
+  assert.equal(
+    bestPageStream(`sources:[{label:"720p",file:"https://cdn.example.com/a/v1.m3u8"},{label:"1080p",file:"https://cdn.example.com/a/v2.m3u8"},{label:"480p",file:"https://cdn.example.com/a/v3.m3u8"}]`),
+    "https://cdn.example.com/a/v2.m3u8",
+    "the entry labelled 1080p",
+  );
+  assert.equal(bestPageStream(`{"720":"https://c.example.com/x/7.m3u8","1080":"https://c.example.com/x/9.m3u8"}`), "https://c.example.com/x/9.m3u8", "keyed by height");
+  assert.equal(
+    bestPageStream(`{"hd":"https://c.example.com/v_720p.m3u8","hls":"https://c.example.com/v/master.m3u8"}`),
+    "https://c.example.com/v/master.m3u8",
+    "a master list lists them all",
+  );
+  const html = `<script>var cfg={"hls":{"360":"https:\\/\\/cdn.example.com\\/v\\/abc_360p.m3u8?t=1\\u0026e=2",
+    "1080":"https:\\/\\/cdn.example.com\\/v\\/abc_1080p.m3u8?t=1\\u0026e=2","720":"https://cdn.example.com/v/abc_720p.m3u8"}}</script>`;
+  assert.equal(bestPageStream(html), "https://cdn.example.com/v/abc_1080p.m3u8?t=1&e=2", "the 1080p one, unescaped");
+  assert.equal(
+    bestPageStream(`<video data-src="https://cdn.example.com/master.m3u8?a=1&amp;b=2"></video>`),
+    "https://cdn.example.com/master.m3u8?a=1&b=2",
+    "no quality named: the first, &amp; undone",
+  );
+  // Each escape undone once: a script's "&amp;" is the text "&amp;", not "&".
+  assert.equal(
+    bestPageStream(`{"hls":"https:\\/\\/c.example.com\\/v\\/master.m3u8?a=1\\u0026amp;b=2"}`),
+    "https://c.example.com/v/master.m3u8?a=1&amp;b=2",
+    "\\u0026amp; undone once",
+  );
+  assert.equal(bestPageStream("<p>no video here, just video.mp4</p>"), "", "none");
+  // The page is read as a look-up starts, never as the button follows the pointer (describe).
+  const body = (name) => {
+    const at = source.indexOf(`  function ${name}(`);
+    return source.slice(at, source.indexOf("\n  }\n", at));
+  };
+  assert.ok(!body("describe").includes("pageStream("), "describe doesn't read the page");
+  assert.ok(body("startLook").includes("pageStream()"), "startLook does");
+  // One minute for the whole look-up, the page's stream included: it always ends.
+  assert.ok(body("startLook").includes("pageLook(lookUp, l.at + LOOKUP_MS)"), "the page's stream within the look-up's minute");
+  ok("a stream the page wrote is found before the video plays");
+}
+
 // What the resolvers build is a form yt-dlp's extractors read (their _VALID_URL, yt-dlp
 // 2026.08.19), so the app's lookup finds the one video.
 {
@@ -5751,6 +5801,29 @@ const until = async (what, ms, check) => {
   const pack = readText("./pack.ps1");
   for (const f of ["popup-ui.js", "popup-downloads.js"]) assert.ok(pack.includes(`"${f}"`), `pack.ps1 copies ${f}`);
   ok("#1496 no new permissions; the popup's new scripts are packed");
+}
+
+// The e2e's tabs (tools/extension/e2e.mjs): a session's `tab` hands out an extension's page only
+// once it loaded. Chrome's Target.createTarget answers while the popup is still being read, its
+// Reset button there for hundreds of milliseconds before popup.js gives it its listener: calm's
+// click on it then did nothing, and "the button's places forgotten" timed out in Chrome only.
+{
+  const e2e = readText("./e2e.mjs");
+  const loaded = /export const PAGE_LOADED = '([^']+)';/.exec(e2e);
+  assert.ok(loaded, "e2e.mjs says what a loaded page is (PAGE_LOADED)");
+  const isLoaded = (readyState, protocol) => new Function("document", "location", `return ${loaded[1]};`)({ readyState }, { protocol });
+  assert.equal(isLoaded("loading", "chrome-extension:"), false, "a popup still being read (its scripts not run) isn't loaded");
+  assert.equal(isLoaded("interactive", "moz-extension:"), false, "nor one waiting for its pictures");
+  assert.equal(isLoaded("complete", "about:"), false, "nor the blank page a new tab starts on");
+  assert.equal(isLoaded("complete", "chrome-extension:"), true, "a popup whose scripts ran is");
+  // Each browser's `tab` (Chromium's, Firefox's) waits for it before it returns the tab.
+  const tabs = [...e2e.matchAll(/\n {4}const tab = async \(url\) => \{\n([\s\S]*?)\n {4}\};/g)].map((m) => m[1]);
+  assert.equal(tabs.length, 2, "e2e.mjs has Chromium's and Firefox's tab");
+  for (const body of tabs) {
+    const wait = body.search(/await until\([^\n]*\bev\(PAGE_LOADED\)/);
+    assert.ok(wait > 0 && wait < body.lastIndexOf("return { evaluate: ev"), "the tab is handed out once its page loaded");
+  }
+  ok("the e2e's tabs are handed out once their page loaded (calm's Reset in Chrome)");
 }
 assert.deepEqual(complaints, [], "nothing written to the console as an error or warning");
 
