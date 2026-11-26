@@ -1394,6 +1394,8 @@
 #. text in countries.rs
 #. a country's name (where a download's server is)
 	Ecuador	Ecuador
+#. message or event log entry in the main window
+	ed2k link: {link}	ed2k link: {link}
 #. button in the Options window
 #. verb: edit the item
 	Edit	Edit

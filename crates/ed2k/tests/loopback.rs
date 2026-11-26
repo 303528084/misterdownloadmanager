@@ -20,7 +20,8 @@ async fn a_file_is_downloaded_verified_and_named_as_the_link_says() {
     let serving = serve(&source, "a film.mkv").await;
 
     let link = {
-        let (hash, _) = hash_reader_full(std::fs::File::open(&source).expect("open")).expect("hash");
+        let (hash, _) =
+            hash_reader_full(std::fs::File::open(&source).expect("open")).expect("hash");
         Ed2kLink {
             name: "a film.mkv".to_string(),
             size: SIZE,
@@ -64,7 +65,8 @@ async fn a_part_left_by_an_earlier_run_is_not_fetched_again() {
     let serving = serve(&source, "resumed.mkv").await;
 
     let link = {
-        let (hash, _) = hash_reader_full(std::fs::File::open(&source).expect("open")).expect("hash");
+        let (hash, _) =
+            hash_reader_full(std::fs::File::open(&source).expect("open")).expect("hash");
         Ed2kLink {
             name: "resumed.mkv".to_string(),
             size: SIZE,

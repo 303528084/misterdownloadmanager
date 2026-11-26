@@ -35,7 +35,9 @@ pub fn parse(text: &str) -> Result<Ed2kLink, LinkError> {
 
 /// Something MDM could read as an ed2k link, without reading it (`Add URL`'s first look).
 pub fn looks_like_link(text: &str) -> bool {
-    text.trim_start().to_ascii_lowercase().starts_with("ed2k://")
+    text.trim_start()
+        .to_ascii_lowercase()
+        .starts_with("ed2k://")
 }
 
 /// Read `text` as an ed2k link, also when it comes wrapped the way download pages wrap
@@ -74,9 +76,7 @@ fn unwrap(text: &str) -> Option<String> {
     let inner = if opening.is_empty() {
         decoded.as_str()
     } else {
-        decoded
-            .strip_prefix(opening)?
-            .strip_suffix(closing)?
+        decoded.strip_prefix(opening)?.strip_suffix(closing)?
     };
     Some(inner.to_string())
 }
@@ -177,18 +177,31 @@ mod tests {
         let link = parse_wrapped(THUNDER).expect("the wrapped link");
         assert_eq!(link.size, 1_034_384_725);
         assert_eq!(link.hash.to_hex(), "e3964138f86625da75103e53aa0af1a1");
-        assert_eq!(link.name, "【高清MP4电影www.domp4.cc】jtdyj.2024.HD1080p.gyzz.mp4");
+        assert_eq!(
+            link.name,
+            "【高清MP4电影www.domp4.cc】jtdyj.2024.HD1080p.gyzz.mp4"
+        );
         // And a plain link still reads as itself.
-        assert_eq!(parse_wrapped(LINK).expect("plain"), parse(LINK).expect("plain"));
-        assert!(matches!(parse_wrapped("thunder://not*base64"), Err(LinkError::NotEd2k)));
+        assert_eq!(
+            parse_wrapped(LINK).expect("plain"),
+            parse(LINK).expect("plain")
+        );
+        assert!(matches!(
+            parse_wrapped("thunder://not*base64"),
+            Err(LinkError::NotEd2k)
+        ));
         // A wrapper around something MDM doesn't download is still not an ed2k file link.
-        let magnet = base64::engine::general_purpose::STANDARD.encode("AAmagnet:?xt=urn:btih:abcZZ");
+        let magnet =
+            base64::engine::general_purpose::STANDARD.encode("AAmagnet:?xt=urn:btih:abcZZ");
         assert!(parse_wrapped(&format!("thunder://{magnet}")).is_err());
     }
 
     #[test]
     fn a_name_the_system_refuses_becomes_one_it_takes() {
-        assert_eq!(safe_name("a/b\\c:d*e?f\"g<h>i|j.iso"), "a_b_c_d_e_f_g_h_i_j.iso");
+        assert_eq!(
+            safe_name("a/b\\c:d*e?f\"g<h>i|j.iso"),
+            "a_b_c_d_e_f_g_h_i_j.iso"
+        );
         assert_eq!(safe_name("dots...   "), "dots");
         assert_eq!(safe_name(""), "file");
         assert_eq!(safe_name("   "), "file");

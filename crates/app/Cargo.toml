@@ -49,6 +49,7 @@ mdm-ipc.workspace = true
 mdm-remote.workspace = true
 mdm-tools.workspace = true
 mdm-torrent.workspace = true
+mdm-ed2k.workspace = true
 open.workspace = true
 reqwest.workspace = true
 serde.workspace = true

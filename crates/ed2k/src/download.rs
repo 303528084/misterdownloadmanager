@@ -52,6 +52,8 @@ pub struct Download {
     pub(crate) rebuild: AtomicBool,
     /// The app waits when told (a part is done, the file finished, a failure).
     pub(crate) changed: Notify,
+    /// Where the file went, once it is finished (its name may have been numbered).
+    target: Mutex<Option<PathBuf>>,
     state: Mutex<State>,
     error: Mutex<Option<String>>,
     sources: Mutex<Vec<KadSource>>,
@@ -81,6 +83,7 @@ impl Download {
             running: AtomicBool::new(false),
             rebuild: AtomicBool::new(rebuild),
             changed: Notify::new(),
+            target: Mutex::new(None),
             state: Mutex::new(State::Running),
             error: Mutex::new(None),
             sources: Mutex::new(Vec::new()),
@@ -197,7 +200,16 @@ impl Download {
             };
             self.peers.fetch_add(1, Ordering::Relaxed);
             let result = self
-                .fetch_part(settings, our_tcp_port, addr, &source, index, start, end, &mut file)
+                .fetch_part(
+                    settings,
+                    our_tcp_port,
+                    addr,
+                    &source,
+                    index,
+                    start,
+                    end,
+                    &mut file,
+                )
                 .await;
             self.peers.fetch_sub(1, Ordering::Relaxed);
             match result {
@@ -222,7 +234,12 @@ impl Download {
         }
     }
 
-    fn options(&self, settings: &Settings, our_tcp_port: u16, source: &KadSource) -> DownloadOptions {
+    fn options(
+        &self,
+        settings: &Settings,
+        our_tcp_port: u16,
+        source: &KadSource,
+    ) -> DownloadOptions {
         DownloadOptions {
             file_size: self.link.size,
             hash: self.link.hash,
@@ -310,14 +327,7 @@ impl Download {
         let expected = self.parts.expected(index);
         let mut no_events = |_event: DownloadEvent| {};
         session
-            .download_range(
-                start,
-                end,
-                expected,
-                file,
-                &mut no_events,
-                || self.paused(),
-            )
+            .download_range(start, end, expected, file, &mut no_events, || self.paused())
             .await?;
         Ok(())
     }
@@ -397,6 +407,9 @@ impl Download {
         }
         std::fs::rename(&self.part_path, &target)
             .map_err(|e| anyhow::anyhow!("moving the file into place: {e}"))?;
+        if let Ok(mut t) = self.target.lock() {
+            *t = Some(target.clone());
+        }
         let _ = std::fs::remove_file(&self.met_path);
 
         // The hash set a finished file is served with: eMule peers ask for it to check their
@@ -405,6 +418,11 @@ impl Download {
         self.set_state(State::Finished);
         self.changed.notify_waiters();
         Ok((target, hashset))
+    }
+
+    /// Where the finished file is, once it is finished.
+    pub fn target(&self) -> Option<PathBuf> {
+        self.target.lock().ok().and_then(|t| t.clone())
     }
 
     /// The file's part count, for what serves it.
@@ -432,5 +450,3 @@ pub(crate) async fn open_part(path: &PathBuf, size: u64) -> Result<tokio::fs::Fi
     }
     Ok(file)
 }
-
-

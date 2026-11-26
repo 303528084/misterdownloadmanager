@@ -68,21 +68,33 @@ neither forwarded, MDM is a **LowID** peer: it still downloads, but it can't acc
 from peers that are also behind a firewall, which means fewer sources and longer queues. Forwarding
 both ports to this computer makes it **HighID**.
 
-## For the app (what is still to wire)
+## In the window
 
-The engine is complete and tested; putting it in the window is the remaining work:
+An `ed2k://` link is an address MDM downloads, in **Add URL**, in a link copied to the clipboard,
+in a batch from the clipboard, in Link grabber and in an imported list — and inside a
+`thunder://`, `flashget://` or `qqdl://` wrapper, which many eMule-era pages write
+([Adding downloads](adding-downloads.md)).
 
-- **Add URL**, Link grabber and the clipboard: an `ed2k://` link is an address MDM accepts (also
-  inside a `thunder://` wrapper, which the app already unwraps), and adds a download held by the
-  ed2k session instead of the HTTP engine.
-- **The list**: a download's progress comes from `Ed2k::stats()` (`downloaded`, `sources`, `peers`)
-  rather than from the HTTP engine's; **Pause**, **Resume**, **Stop** and **Remove** call
-  `pause`, `resume`, `remove`.
-- **Settings**: `Settings` (ports, name, seeding, peers) in a page of its own, saved with the rest.
-- **Naming**: the file is put in the download's folder by the engine; a finished download needs no
-  move, and a name another file has gets ` (1)`.
+- **The list.** An ed2k link is held as the address `ed2k://file/<hash>/<size>?name=<name>`, which
+  says everything the link says (`|` may not be in a URL): the same file added twice is one
+  download, and the row's event log keeps the link as a person writes it, to read and to copy.
+  The row's name and size are the link's own, so nothing is looked up over HTTP and **Download
+  File Info** isn't shown: the file starts at once, in its category's folder.
+- **Progress.** The row's bytes and state come from the session's `stats()` — read from a
+  snapshot the app takes a few times a second, so the window never waits on Kad or a peer. The
+  session runs one task in the background from the first ed2k download until MDM closes, with
+  the parts, the Kad list and the credit identity in `ed2k` under MDM's data folder.
+- **Stop, resume, remove.** **Pause**/**Stop** pauses the session's download and keeps its parts
+  (**Resume** goes on from them, also after MDM was closed); **Remove** takes it off the session,
+  and its parts go with its files when they are deleted. A finished file is the engine's own: it
+  is put in the download's folder under the link's name, a name already taken numbered ` (1)`.
+- **Not wired yet:** a page for the session's settings (ports, name, seeding, peers) — the
+  defaults are eMule's, with seeding on — and the peers/sources numbers in the row's columns
+  beyond the list's own progress.
 
 `cargo test -p mdm-ed2k` runs the engine against a loopback peer: a file downloaded, verified,
 named and resumed, a peer serving another file refused, and the command line doing the same. The
 one test that needs the network (`the_kad_network_can_be_joined`) is `#[ignore]`d:
-`cargo test -p mdm-ed2k -- --ignored`.
+`cargo test -p mdm-ed2k -- --ignored`. The app's own wiring is checked by
+`cargo test -p mdm-app --lib ed2k` and, with the Kad network,
+`cargo test -p mdm-app --lib -- --ignored ed2k`.

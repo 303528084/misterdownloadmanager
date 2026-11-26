@@ -4653,6 +4653,7 @@ dependencies = [
  "mdm-cnl",
  "mdm-crash",
  "mdm-debrid",
+ "mdm-ed2k",
  "mdm-engine",
  "mdm-extract",
  "mdm-filedialog",

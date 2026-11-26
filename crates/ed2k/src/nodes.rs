@@ -97,8 +97,8 @@ mod tests {
         };
         let bytes = write_nodes_dat(std::slice::from_ref(&contact));
         std::fs::write(settings.nodes_path(), bytes).expect("save");
-        let list = parse_nodes_dat(&std::fs::read(settings.nodes_path()).expect("read"))
-            .expect("parse");
+        let list =
+            parse_nodes_dat(&std::fs::read(settings.nodes_path()).expect("read")).expect("parse");
         assert_eq!(list.len(), 1);
         assert_eq!(list[0].ip, contact.ip);
         assert_eq!(list[0].udp_port, 4672);

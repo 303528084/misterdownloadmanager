@@ -505,6 +505,10 @@ pub struct Item {
     /// A torrent or magnet (M15): its `url` is a magnet link, `dest` its folder or one file.
     #[serde(default)]
     pub torrent: Option<crate::torrents::TorrentSpec>,
+    /// An ed2k (eDonkey2000) file (M16): its `url` is the link's address (`ed2k::address`), its
+    /// `dest` where the finished file goes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ed2k: Option<crate::ed2k::Ed2kSpec>,
     /// An image gallery downloaded by gallery-dl (#58): its `url` is the gallery's page, `dest`
     /// the folder its files go into.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -722,6 +726,8 @@ pub enum Job {
         url: Url,
     },
     Torrent(crate::torrents::Run),
+    /// An ed2k (eDonkey2000) file, downloaded by `mdm-ed2k`'s session (M16).
+    Ed2k(crate::ed2k::Run),
     /// A torrent through a debrid account, then its files over HTTP (#44).
     Remote(mdm_debrid::torrents::RemoteTorrent),
     /// Files picked out of a ZIP on its server (#1775).
@@ -924,6 +930,7 @@ impl Job {
         match self {
             Job::File(d) => d.snapshot(),
             Job::Torrent(t) => t.snapshot(),
+            Job::Ed2k(r) => r.snapshot(),
             Job::Remote(r) => r.snapshot(),
             Job::Zip(z) => z.snapshot(),
             Job::Video { job, url } => tool_snapshot(job.progress(), url),
@@ -937,6 +944,7 @@ impl Job {
             Job::Video { job, .. } => job.stop(),
             Job::Gallery { job, .. } => job.stop(),
             Job::Torrent(t) => t.cancel(),
+            Job::Ed2k(r) => r.cancel(),
             Job::Remote(r) => r.cancel(),
             Job::Zip(z) => z.cancel(),
         }
@@ -992,6 +1000,8 @@ impl Job {
         match self {
             Job::File(d) => d.set_speed_limit(rate),
             Job::Torrent(t) => t.set_speed_limit(rate),
+            // ed2k has no limiter of its own: the session shares Kad's bandwidth as it comes.
+            Job::Ed2k(_) => {}
             Job::Remote(r) => r.set_speed_limit(rate),
             Job::Zip(z) => z.set_speed_limit(rate),
             Job::Video { job, .. } => job.set_speed_limit(rate),
@@ -1003,6 +1013,7 @@ impl Job {
         match self {
             Job::File(d) => d.speed_limit(),
             Job::Torrent(t) => t.speed_limit(),
+            Job::Ed2k(_) => None,
             Job::Video { job, .. } => job.speed_limit(),
             Job::Gallery { job, .. } => job.speed_limit(),
             Job::Remote(r) => r.speed_limit(),
@@ -1366,6 +1377,7 @@ impl Item {
         self.live.is_none()
             && self.move_from.is_none()
             && self.torrent.is_none()
+            && self.ed2k.is_none()
             && self.video.is_none()
             && self.gallery.is_none()
             && self.remote.is_none()
@@ -1383,6 +1395,7 @@ impl Item {
         c.list_tick = self.list_tick;
         c.video.clone_from(&self.video);
         c.torrent.clone_from(&self.torrent);
+        c.ed2k.clone_from(&self.ed2k);
         c.gallery.clone_from(&self.gallery);
         c.zip.clone_from(&self.zip);
         c.remote.clone_from(&self.remote);
@@ -1418,6 +1431,7 @@ impl Item {
             own_limit: None,
             video: None,
             torrent: None,
+            ed2k: None,
             gallery: None,
             zip: None,
             log: Vec::new(),
@@ -1467,6 +1481,7 @@ impl Item {
         self.video.is_none()
             && self.gallery.is_none()
             && self.torrent.is_none()
+            && self.ed2k.is_none()
             && self.remote.is_none()
             && self.zip.is_none()
     }
@@ -3014,6 +3029,11 @@ pub fn parse_address(typed: &str) -> Result<url::Url, url::ParseError> {
         }
         _ => typed,
     };
+    // An ed2k link (M16): no URL (`|` is a forbidden character in one), so it gets the address
+    // the app holds it by (`ed2k::address`), which carries everything it says.
+    if let Ok(link) = mdm_ed2k::parse(typed) {
+        return Ok(crate::ed2k::address(&link));
+    }
     match url::Url::parse(typed) {
         Err(url::ParseError::RelativeUrlWithoutBase)
             if !typed.contains(char::is_whitespace)
@@ -3076,8 +3096,22 @@ mod address_tests {
             let u = super::parse_address(&wrapped).expect(&wrapped);
             assert_eq!(u.as_str(), "https://dl.example.org/pack/a.zip", "{wrapped}");
         }
+        // An ed2k link (M16) is one MDM downloads too: the file it names, by its own name, size
+        // and hash.
+        let ed2k = "ed2k://|file|a.iso|733468672|0123456789abcdef0123456789abcdef|/";
+        for wrapped in wrappers(ed2k) {
+            let u = super::parse_address(&wrapped).expect(&wrapped);
+            assert!(crate::ed2k::is_address(&u), "{wrapped}");
+            let back = crate::ed2k::link_of(&u).expect("the link back");
+            assert_eq!(back.name, "a.iso", "{wrapped}");
+            assert_eq!(back.size, 733468672, "{wrapped}");
+            assert_eq!(
+                back.hash.to_hex(),
+                "0123456789abcdef0123456789abcdef",
+                "{wrapped}"
+            );
+        }
         let mut not: Vec<String> = Vec::new();
-        not.extend(wrappers("ed2k://|file|a.iso|733468672|0123456789ABCDEF|/"));
         not.extend(wrappers("file:///C:/Windows/win.ini"));
         not.extend([
             "thunder://not*base64".to_owned(),
@@ -3087,8 +3121,9 @@ mod address_tests {
         ]);
         for wrapped in not {
             // What Add URL and Download File Info ask before they take an address.
-            let taken = super::parse_address(&wrapped)
-                .is_ok_and(|u| mdm_engine::supported(&u) || u.scheme() == "magnet");
+            let taken = super::parse_address(&wrapped).is_ok_and(|u| {
+                mdm_engine::supported(&u) || u.scheme() == "magnet" || crate::ed2k::is_address(&u)
+            });
             assert!(!taken, "{wrapped}");
         }
     }

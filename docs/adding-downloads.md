@@ -14,7 +14,9 @@ There are several ways to give MDM something to download. Most of them end in th
 
 MDM takes `http://`, `https://`, `ftp://`, `ftps://`, `ftpes://` and `magnet:` addresses. Anything else gets **Invalid address**.
 
-A `thunder://`, `flashget://` or `qqdl://` link is one of those addresses wrapped in base64, as download pages made for Thunder (Xunlei), FlashGet and QQ's downloader write them. MDM unwraps it and downloads from the address inside, here, from the clipboard and in **Link grabber**; the download is listed under that address. A link that wraps anything else, or that can't be read, gets **Invalid address** too.
+A `thunder://`, `flashget://` or `qqdl://` link is one of those addresses wrapped in base64, as download pages made for Thunder (Xunlei), FlashGet and QQ's downloader write them. MDM unwraps it and downloads from the address inside, here, from the clipboard and in **Link grabber**; the download is listed under that address. The address inside can also be an `ed2k://` link to a file on eDonkey2000's network, which many of those pages wrap: MDM downloads it with its own eMule engine ([eDonkey2000 (ed2k) downloads](ed2k.md)). A link that wraps anything else, or that can't be read, gets **Invalid address** too.
+
+An `ed2k://|file|name|size|hash|/` link itself, typed or pasted, is a download too: its row is the file the link names, its own name and size, and it starts at once (there is nothing to look up: the link already says which file it is).
 
 ![Enter new address to download, with the Address box, Use authorization and OK](images/help/add-url.webp)
 *The numbers are the steps above: 3 the address, 4 a login if the server needs one, 5 OK.*

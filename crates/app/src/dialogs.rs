@@ -973,6 +973,10 @@ impl AddUrl {
         {
             self.address = clip.to_owned();
         }
+        // An ed2k link (M16) is no URL of the engine's: it is taken as the address it holds.
+        if let Ok(link) = mdm_ed2k::parse(clip) {
+            self.address = crate::ed2k::address(&link).to_string();
+        }
     }
 
     /// "Use authorization" shows the Sites Logins entry the download will use for the address
@@ -1173,7 +1177,11 @@ impl AddUrl {
                 }
                 if ok || (enter && !list_was_open) {
                     match crate::model::parse_address(&self.address) {
-                        Ok(url) if mdm_engine::supported(&url) || url.scheme() == "magnet" => {
+                        Ok(url)
+                            if mdm_engine::supported(&url)
+                                || url.scheme() == "magnet"
+                                || crate::ed2k::is_address(&url) =>
+                        {
                             return Outcome::Done(NewUrl {
                                 url,
                                 login: self.typed_login(),

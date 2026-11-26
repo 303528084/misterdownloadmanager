@@ -4,8 +4,8 @@
 
 use std::collections::HashMap;
 use std::net::Ipv4Addr;
-use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
+use std::sync::atomic::AtomicU64;
 use std::time::{Duration, Instant};
 
 use mdm_ed2k::{Ed2k, PART_SIZE, Settings, State};
@@ -117,7 +117,10 @@ pub fn settings_for(dir: &std::path::Path, port: u16) -> Settings {
 pub async fn wait_finished(ed2k: &Arc<Ed2k>, id: u64, within: Duration) -> mdm_ed2k::Stats {
     let start = Instant::now();
     loop {
-        let stats = ed2k.stats_of(id).await.expect("the download is in the list");
+        let stats = ed2k
+            .stats_of(id)
+            .await
+            .expect("the download is in the list");
         if stats.state != State::Running {
             return stats;
         }
@@ -128,4 +131,3 @@ pub async fn wait_finished(ed2k: &Arc<Ed2k>, id: u64, within: Duration) -> mdm_e
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
 }
-

@@ -117,10 +117,7 @@ async fn main() -> ExitCode {
     }
     if let Some(peer) = args.peer {
         // A known peer only: no Kad, no network beyond it (what a test needs).
-        let Some(addr) = peer
-            .parse::<std::net::SocketAddrV4>()
-            .ok()
-        else {
+        let Some(addr) = peer.parse::<std::net::SocketAddrV4>().ok() else {
             eprintln!("mdm-ed2k: --peer wants IP:PORT");
             return ExitCode::from(2);
         };
@@ -201,7 +198,10 @@ async fn main() -> ExitCode {
                 return ExitCode::SUCCESS;
             }
             State::Failed => {
-                eprintln!("mdm-ed2k: {}", stats.error.unwrap_or_else(|| "failed".into()));
+                eprintln!(
+                    "mdm-ed2k: {}",
+                    stats.error.unwrap_or_else(|| "failed".into())
+                );
                 return ExitCode::FAILURE;
             }
             State::Paused | State::Running => {}

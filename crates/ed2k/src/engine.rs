@@ -11,8 +11,8 @@
 use std::collections::HashMap;
 use std::net::Ipv4Addr;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, AtomicU16, AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicU16, AtomicU64, Ordering};
 use std::time::Duration;
 
 use anyhow::{Context, Result};
@@ -38,6 +38,8 @@ pub struct Spec {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Stats {
     pub id: u64,
+    /// The file's hash: what the session and the app know it by.
+    pub hash: crate::Ed2kHash,
     pub name: String,
     pub size: u64,
     /// The bytes here (whole parts only).
@@ -50,6 +52,8 @@ pub struct Stats {
     pub peers: usize,
     pub state: State,
     pub error: Option<String>,
+    /// Where the finished file went (its name numbered when another file had it).
+    pub path: Option<PathBuf>,
 }
 
 /// An ed2k session.
@@ -120,22 +124,22 @@ impl Ed2k {
             done,
             rebuild,
         ));
-        self.inner.downloads.lock().await.insert(id, download.clone());
         self.inner
-            .served
-            .write()
+            .downloads
+            .lock()
             .await
-            .insert(
-                *spec.link.hash.as_bytes(),
-                UploadInfo {
-                    name: spec.link.name.clone(),
-                    total_size: spec.link.size,
-                    num_slices: count,
-                    path: part_path,
-                    complete: false,
-                    hashset: Vec::new(),
-                },
-            );
+            .insert(id, download.clone());
+        self.inner.served.write().await.insert(
+            *spec.link.hash.as_bytes(),
+            UploadInfo {
+                name: spec.link.name.clone(),
+                total_size: spec.link.size,
+                num_slices: count,
+                path: part_path,
+                complete: false,
+                hashset: Vec::new(),
+            },
+        );
 
         let inner = Arc::clone(&self.inner);
         tokio::spawn(supervise(inner, download));
@@ -197,6 +201,7 @@ impl Ed2k {
             .values()
             .map(|download| Stats {
                 id: download.id,
+                hash: download.link.hash,
                 name: download.link.name.clone(),
                 size: download.link.size,
                 downloaded: download.downloaded(),
@@ -206,6 +211,7 @@ impl Ed2k {
                 peers: download.peers(),
                 state: download.state(),
                 error: download.error(),
+                path: download.target(),
             })
             .collect();
         all.sort_by_key(|s| s.id);
@@ -228,7 +234,11 @@ impl Ed2k {
 
     /// Which peers hold a file, without downloading it (what Add URL shows before a link is
     /// added).
-    pub async fn sources(&self, hash: crate::Ed2kHash, size: u64) -> Vec<rucio_emule::kad::search::KadSource> {
+    pub async fn sources(
+        &self,
+        hash: crate::Ed2kHash,
+        size: u64,
+    ) -> Vec<rucio_emule::kad::search::KadSource> {
         match self.inner.kad().await {
             Some(kad) => kad.search_sources(hash, size).await,
             None => Vec::new(),
@@ -369,7 +379,10 @@ async fn run_until_done(
         let sources = match &settings.sources {
             Some(query) => query(download.link.hash, download.link.size).await,
             None => match inner.kad().await {
-                Some(kad) => kad.search_sources(download.link.hash, download.link.size).await,
+                Some(kad) => {
+                    kad.search_sources(download.link.hash, download.link.size)
+                        .await
+                }
                 None => Vec::new(),
             },
         };
@@ -379,17 +392,16 @@ async fn run_until_done(
         }
 
         if download.sources() == 0 {
-            tracing::debug!(
-                download = download.id,
-                "ed2k: no sources yet, asking again"
-            );
+            tracing::debug!(download = download.id, "ed2k: no sources yet, asking again");
             sleep_unless_paused(download, Duration::from_secs(15)).await;
             continue;
         }
 
         // A `.part` from an earlier run whose progress was lost: the hashes come first, so the
         // parts already on disk are known (and not fetched again) before any worker claims one.
-        let _ = download.prime(settings, inner.tcp_port.load(Ordering::Relaxed)).await;
+        let _ = download
+            .prime(settings, inner.tcp_port.load(Ordering::Relaxed))
+            .await;
 
         let workers = settings
             .max_peers
@@ -445,4 +457,3 @@ async fn sleep_unless_paused(download: &Arc<Download>, time: Duration) {
         _ = download.changed.notified() => {}
     }
 }
-

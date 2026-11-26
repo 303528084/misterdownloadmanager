@@ -1587,6 +1587,8 @@ pub struct App {
     torrents_started: bool,
     /// The torrent session, started on first use (D-014).
     torrent_host: crate::torrents::Host,
+    /// The ed2k session, started on first use (M16).
+    ed2k_host: crate::ed2k::Host,
     /// The remote control (#141): paired phones and computers on the local network.
     pub remote: Option<mdm_remote::Remote>,
     /// Torrents a paired device sent, their files being looked up (`remote::poll_torrents`).
@@ -2408,6 +2410,7 @@ impl App {
             public_trackers: Default::default(),
             torrents_started: false,
             torrent_host: crate::torrents::Host::new(),
+            ed2k_host: crate::ed2k::Host::new(),
             remote: None,
             remote_torrents: Vec::new(),
             cnl,
@@ -3168,6 +3171,30 @@ impl App {
         item.private_window = context.private;
         let private = context.private;
         item.context = context;
+        // An ed2k link (M16): its name and its size are the link's own, whatever the add guessed
+        // from the address; the link itself is the row's `ed2k` part.
+        if let Some(link) = crate::ed2k::link_of(&item.url) {
+            let name = mdm_ed2k::safe_name(&link.name);
+            if let Some(parent) = item.dest.parent() {
+                item.dest = parent.join(&name);
+            }
+            item.file_name = name;
+            item.size = Some(link.size);
+            item.name_from_url = false;
+            item.number_at_start = false;
+            // i18n: event log entry when an ed2k link is added: {link} = the link (ed2k://|file|...|/)
+            item.note(crate::i18n::fmt(
+                crate::i18n::t("ed2k link: {link}"),
+                &[(
+                    "link",
+                    &crate::ed2k::link_text(&item.file_name, link.size, &link.hash.to_hex()),
+                )],
+            ));
+            item.ed2k = Some(crate::ed2k::Ed2kSpec {
+                hash: link.hash.to_hex(),
+                ..Default::default()
+            });
+        }
         self.items.push(item);
         self.dirty = true;
         if private {
@@ -4128,8 +4155,14 @@ impl App {
         let url = cmd
             .url
             .as_deref()
-            .and_then(|u| url::Url::parse(u.trim()).ok())
-            .filter(mdm_engine::supported);
+            .and_then(|u| {
+                let u = u.trim();
+                // An ed2k link (M16) is no URL: it gets the address the app holds it by.
+                url::Url::parse(u)
+                    .ok()
+                    .or_else(|| mdm_ed2k::parse(u).ok().map(|l| crate::ed2k::address(&l)))
+            })
+            .filter(|u| mdm_engine::supported(u) || crate::ed2k::is_address(u));
         let Some(url) = url else {
             if !cmd.start_queue {
                 // A plain second launch brings the window to the front, as IDM does.
@@ -4569,6 +4602,11 @@ impl App {
         }
         if self.item(id).is_some_and(|i| i.torrent.is_some()) {
             self.start_torrent(id, show);
+            return;
+        }
+        // An ed2k file (M16): `mdm-ed2k`'s session, not the engine.
+        if self.item(id).is_some_and(|i| i.ed2k.is_some()) {
+            self.start_ed2k(id, show);
             return;
         }
         // A torrent through a debrid account (#44).
@@ -5027,6 +5065,11 @@ impl App {
         }
         let protected = self.claimed_paths(Some(id));
         self.release_link(id);
+        // An ed2k download (M16): the session forgets it, its parts going when its files do; the
+        // finished file goes below, as any file's.
+        if let Some(spec) = self.item(id).and_then(|i| i.ed2k.clone()) {
+            self.ed2k_host.forget(&self.rt, &spec.hash, files);
+        }
         let mut doomed = None;
         if let Some(spec) = self.item(id).and_then(|i| i.torrent.clone()) {
             let item = self.items.iter().find(|i| i.id == id).unwrap();
@@ -5723,7 +5766,9 @@ impl App {
             return;
         };
         let name = mdm_engine::naming::file_name(None, &url);
-        if mdm_engine::supported(&url) && self.settings.clipboard_type(&name) {
+        if (mdm_engine::supported(&url) || crate::ed2k::is_address(&url))
+            && self.settings.clipboard_type(&name)
+        {
             // Where a Download File Info came from, without the address (#1157).
             tracing::info!("clipboard: a newly copied link, offered for download");
             // Its Download File Info waits during a full-screen app, as every window that comes
@@ -7575,6 +7620,54 @@ impl App {
     }
 
     /// Start a torrent: the session adds or resumes it.
+    /// Start (or resume) an ed2k download (M16): the session takes it in (or goes on with its
+    /// parts), and the row's numbers come from the session as `Item::poll` reads them.
+    fn start_ed2k(&mut self, id: u64, show: bool) {
+        let (host, rt) = (self.ed2k_host.clone(), self.rt.clone());
+        let downloads = self.downloads.clone();
+        let Some(item) = self.item(id) else { return };
+        let Some(link) = crate::ed2k::link_of(&item.url) else {
+            return;
+        };
+        let url = item.url.clone();
+        let dir = item
+            .dest
+            .parent()
+            .map_or(downloads, std::path::Path::to_path_buf);
+        let run = crate::ed2k::Run::start(&host, &rt, url, link, dir);
+        item.note(if item.downloaded > 0 {
+            // i18n: event log entry, past tense: the download resumed (just now)
+            crate::i18n::t("Resumed")
+        } else {
+            // i18n: event log entry, past tense: the download started (just now)
+            crate::i18n::t("Started")
+        });
+        item.live = Some(Live::new(model::Job::Ed2k(run), item.downloaded));
+        item.status = Status::Downloading;
+        item.error = None;
+        item.last_try = Some(model::now_stamp());
+        self.dirty = true;
+        if show && !self.progress.iter().any(|p| p.id == id) {
+            self.progress
+                .push(Progress::new(id, self.settings.show_complete));
+        }
+    }
+
+    /// The ed2k session's live counters for the list (peers Kad says hold each file, peers being
+    /// asked now). The bytes and the state reach the rows through `Item::poll`, from the same
+    /// numbers.
+    fn ed2k_tick(&mut self) {
+        for i in self.items.iter_mut() {
+            let Some(spec) = i.ed2k.as_mut() else {
+                continue;
+            };
+            if let Some(seen) = self.ed2k_host.seen(&spec.hash) {
+                spec.sources = seen.sources;
+                spec.peers = seen.peers;
+            }
+        }
+    }
+
     fn start_torrent(&mut self, id: u64, show: bool) {
         let auto_share = self.settings.torrent_keep_sharing;
         let known = self.session_hashes();
@@ -8486,7 +8579,12 @@ impl App {
         }
         let Some(url) = url::Url::parse(text.trim())
             .ok()
-            .filter(mdm_engine::supported)
+            .filter(|u| mdm_engine::supported(u) || crate::ed2k::is_address(u))
+            .or_else(|| {
+                mdm_ed2k::parse(text.trim())
+                    .ok()
+                    .map(|l| crate::ed2k::address(&l))
+            })
         else {
             return fail("unsupported", "not an address MDM downloads");
         };
@@ -12132,6 +12230,12 @@ impl App {
     /// already opens no second window: that one comes to the front (two windows for one address
     /// would make two downloads of it by mistake); one already waiting isn't waited for twice.
     fn open_file_info(&mut self, new: dialogs::NewUrl, context: ipc::Command, ctx: &egui::Context) {
+        // An ed2k link (M16): its name and its size are the link's own, and nothing about it is
+        // looked up over HTTP, so Download File Info has nothing to ask: it is added as it is.
+        if crate::ed2k::is_address(&new.url) {
+            self.add_ed2k(new.url, context);
+            return;
+        }
         if let Some(fi) = self.file_infos.iter().find(|f| f.url == new.url) {
             tracing::info!("Download File Info: the same address again: its window to the front");
             dialogs::raise(ctx, fi.viewport());
@@ -12147,6 +12251,41 @@ impl App {
             return;
         }
         self.open_file_info_now(new, context, ctx);
+    }
+
+    /// Add an ed2k link (M16) at once: its name and size are the link's, its folder the category's
+    /// (or the add's own `dir`), and it starts downloading from the session.
+    fn add_ed2k(&mut self, url: url::Url, context: ipc::Command) {
+        let Some(link) = crate::ed2k::link_of(&url) else {
+            return;
+        };
+        let name = mdm_ed2k::safe_name(&link.name);
+        let category = Category::of(&name);
+        let dir = context
+            .dir
+            .clone()
+            .map(PathBuf::from)
+            .unwrap_or_else(|| self.settings.category_dir(category, &self.downloads));
+        let dest = mdm_engine::naming::guess(&dir, &name);
+        let source = if context.referer.is_some() || context.cookies.is_some() {
+            crate::i18n::mark("from the browser")
+        } else {
+            crate::i18n::mark("with Add URL")
+        };
+        let size = Some(link.size);
+        let id = self.push_item(
+            url,
+            dest,
+            category,
+            String::new(),
+            size,
+            None,
+            context,
+            source,
+        );
+        self.selection.set(id);
+        self.start(id, true);
+        self.dirty = true;
     }
 
     /// The downloads that waited for a Download File Info window, in the order they came, while
@@ -12758,9 +12897,11 @@ impl App {
         for file in lists {
             self.import_file(std::path::Path::new(&file));
         }
-        let (links, other): (Vec<String>, Vec<String>) = items
-            .into_iter()
-            .partition(|s| url::Url::parse(s.trim()).is_ok_and(|u| mdm_engine::supported(&u)));
+        let (links, other): (Vec<String>, Vec<String>) = items.into_iter().partition(|s| {
+            crate::model::parse_address(s).is_ok_and(|u| {
+                mdm_engine::supported(&u) || u.scheme() == "magnet" || crate::ed2k::is_address(&u)
+            })
+        });
         if links.len() > 1 {
             self.show_window(ctx);
             let found = links
@@ -14921,6 +15062,7 @@ impl App {
             );
             crate::crash::step(crate::crash::Step::Torrents);
             self.torrent_tick();
+            self.ed2k_tick();
             // Minimized, the windows these open (Download complete, a limit's notice, Download
             // File Info for a copied link, an update) are made by a pass of the main window's
             // UI, which egui runs then only when asked: every 2 s, as the clock repaints.
@@ -15080,12 +15222,13 @@ impl App {
         unseen.splice(0..0, shown);
         while let Ok(inc) = self.commands.try_recv() {
             if inc.reply.is_none()
-                && let Some(url) = inc
-                    .cmd
-                    .url
-                    .as_deref()
-                    .and_then(|u| url::Url::parse(u.trim()).ok())
-                    .filter(mdm_engine::supported)
+                && let Some(url) = inc.cmd.url.as_deref().and_then(|u| {
+                    let u = u.trim();
+                    url::Url::parse(u)
+                        .ok()
+                        .or_else(|| mdm_ed2k::parse(u).ok().map(|l| crate::ed2k::address(&l)))
+                        .filter(|u| mdm_engine::supported(u) || crate::ed2k::is_address(u))
+                })
             {
                 unseen.push((url, None, inc.cmd));
             }
@@ -16837,6 +16980,49 @@ mod mark_hook_tests {
             (opts.on_file_created.expect("marked").0)(&path);
             assert_marked(&path, named, None);
         }
+    }
+
+    /// M16: an ed2k link's row is the file the link names — its own name, its own size, and the
+    /// hash the session downloads it by — whatever the add made of the address.
+    #[test]
+    fn an_ed2k_link_is_added_as_the_link_says() {
+        let mut app = app();
+        let url = crate::model::parse_address(
+            "ed2k://|file|Some%20Film%20(2024).mp4|1034384725|e3964138f86625da75103e53aa0af1a1|/",
+        )
+        .expect("an ed2k link is an address MDM downloads");
+        let id = app.push_item(
+            url,
+            PathBuf::from("/downloads/guessed-from-the-address"),
+            Category::General,
+            String::new(),
+            None,
+            None,
+            Default::default(),
+            crate::i18n::t("with Add URL"),
+        );
+        let item = app.item(id).expect("the download");
+        assert_eq!(item.file_name, "Some Film (2024).mp4");
+        assert_eq!(
+            item.dest,
+            PathBuf::from("/downloads/Some Film (2024).mp4"),
+            "the link's name in the folder the add chose"
+        );
+        assert_eq!(item.size, Some(1_034_384_725));
+        assert!(
+            !item.engine_file(),
+            "not the engine's: the ed2k session downloads it"
+        );
+        let spec = item.ed2k.as_ref().expect("an ed2k download");
+        assert_eq!(spec.hash, "e3964138f86625da75103e53aa0af1a1");
+        // The link itself is in its log, to be read and copied.
+        assert!(
+            item.log.iter().any(|(_, line)| line.contains(
+                "ed2k://|file|Some Film (2024).mp4|1034384725|e3964138f86625da75103e53aa0af1a1|/"
+            )),
+            "{:?}",
+            item.log.iter().map(|(_, line)| line).collect::<Vec<_>>()
+        );
     }
 }
 

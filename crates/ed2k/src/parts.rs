@@ -30,7 +30,9 @@ impl Parts {
     /// nothing to resume).
     pub fn new(size: u64, root: Ed2kHash, done: Vec<bool>) -> Self {
         let count = count_of(size);
-        let done: Vec<bool> = (0..count).map(|i| done.get(i).copied().unwrap_or(false)).collect();
+        let done: Vec<bool> = (0..count)
+            .map(|i| done.get(i).copied().unwrap_or(false))
+            .collect();
         let remaining = done.iter().filter(|d| !**d).count();
         Self {
             size,
@@ -75,8 +77,7 @@ impl Parts {
             if self.done[i].load(Ordering::Relaxed) {
                 continue;
             }
-            if self
-                .claimed[i]
+            if self.claimed[i]
                 .compare_exchange(false, true, Ordering::AcqRel, Ordering::Relaxed)
                 .is_ok()
             {
@@ -117,7 +118,10 @@ impl Parts {
 
     /// Every part's state, as the progress file keeps it.
     pub fn snapshot(&self) -> Vec<bool> {
-        self.done.iter().map(|d| d.load(Ordering::Relaxed)).collect()
+        self.done
+            .iter()
+            .map(|d| d.load(Ordering::Relaxed))
+            .collect()
     }
 
     /// What part `i` must hash to: the hash set's entry once a peer sent one, else the file's
@@ -216,7 +220,7 @@ mod tests {
         let size = PART_SIZE + 10;
         let p = parts(size);
         assert_eq!(p.expected(0), None, "no set yet, nothing to check against");
-        assert!(!p.offer_hashes(vec![[0u8; 16], [1u8; 16]]) );
+        assert!(!p.offer_hashes(vec![[0u8; 16], [1u8; 16]]));
         assert!(!p.offer_hashes(vec![[0u8; 16]]), "wrong count");
         assert_eq!(p.expected(0), None);
         assert!(p.hashes().is_none());

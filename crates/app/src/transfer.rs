@@ -231,7 +231,8 @@ fn ef2_blocks(text: &str) -> Vec<Imported> {
 }
 
 fn downloadable(url: &str) -> bool {
-    url::Url::parse(url).is_ok_and(|u| mdm_engine::supported(&u))
+    url::Url::parse(url).is_ok_and(|u| mdm_engine::supported(&u) || crate::ed2k::is_address(&u))
+        || mdm_ed2k::parse(url).is_ok()
 }
 
 /// Every download address in free text (a page saved as text, a list, a mail, a forum post):
@@ -367,6 +368,11 @@ fn web_address(cand: &str) -> Option<String> {
         .map(String::from)
 }
 
+/// An ed2k link (M16): its name, size and hash, as `mdm-ed2k` reads it.
+fn ed2k_link(cand: &str) -> Option<String> {
+    mdm_ed2k::parse(cand).ok().map(|_| cand.trim().to_owned())
+}
+
 /// A magnet link to a torrent (one with its BitTorrent hash, `xt=urn:btih:` or `urn:btmh:`).
 fn magnet_link(cand: &str) -> Option<String> {
     let cand = cand.replace("&amp;", "&");
@@ -399,7 +405,8 @@ const WRAPPED_BASE64: base64::engine::GeneralPurpose = base64::engine::GeneralPu
 /// `[FLASHGET]<address>[FLASHGET]` (and sometimes `&<something>` after the base64), QQ the
 /// address alone. The scheme is read in any case; a `/` after the base64 is left out.
 ///
-/// Only an address MDM downloads comes out (http, https, ftp, a magnet link to a torrent).
+/// Only an address MDM downloads comes out (http, https, ftp, a magnet link to a torrent, an
+/// ed2k link to an eDonkey2000 file, M16).
 /// Base64 that can't be read, missing marks, bytes that are not UTF-8 (old links hold GBK
 /// text) and any other address inside are [`Wrapped::Unsupported`]. A wrapped link inside
 /// another is one of those too: a link is unwrapped once and never again, so no link can make
@@ -426,7 +433,7 @@ pub fn unwrapped(link: &str) -> Wrapped {
         if inner.to_ascii_lowercase().starts_with("magnet:?") {
             magnet_link(inner)
         } else {
-            web_address(inner)
+            ed2k_link(inner).or_else(|| web_address(inner))
         }
     };
     inside(code)
@@ -666,9 +673,8 @@ mod tests {
     fn a_wrapped_link_mdm_cannot_download_is_not_supported() {
         let address = "https://dl.example.org/pack/a.zip";
         let mut not: Vec<String> = Vec::new();
-        // Another kind of address inside.
+        // Another kind of address inside (an ed2k link is one MDM downloads since M16, below).
         for inner in [
-            "ed2k://|file|a.iso|733468672|0123456789ABCDEF0123456789ABCDEF|/",
             "file:///C:/Windows/win.ini",
             "mailto:a@b.example",
             "magnet:?dn=no-hash",
@@ -714,6 +720,16 @@ mod tests {
         for wrapped in not {
             assert_eq!(unwrapped(&wrapped), Wrapped::Unsupported, "{wrapped}");
             assert_eq!(found(&wrapped), Vec::<String>::new(), "{wrapped}");
+        }
+        // M16: an ed2k link inside is the address inside, as a magnet link is.
+        let ed2k = "ed2k://|file|a.iso|733468672|0123456789ABCDEF0123456789ABCDEF|/";
+        for wrapped in wrappers(ed2k) {
+            assert_eq!(
+                unwrapped(&wrapped),
+                Wrapped::Address(ed2k.into()),
+                "{wrapped}"
+            );
+            assert_eq!(found(&wrapped), vec![ed2k.to_owned()], "{wrapped}");
         }
     }
 

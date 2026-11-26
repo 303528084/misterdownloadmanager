@@ -20,6 +20,7 @@ mod deleter;
 mod derive;
 mod dialogs;
 mod droptarget;
+mod ed2k;
 mod errors;
 mod extension;
 mod extractq;
