@@ -29,6 +29,11 @@ pub struct Ed2kSpec {
     pub sources: usize,
     #[serde(skip)]
     pub peers: usize,
+    /// Kad's search found nobody sharing the file, and the download has waited a while: what the
+    /// status says instead of "Connecting...", which would read as a slow start rather than a
+    /// link nobody holds.
+    #[serde(skip)]
+    pub no_sources: bool,
 }
 
 /// The address the app keeps for an ed2k link: `ed2k://file/<hash>/<size>?name=<name>`.
@@ -140,6 +145,15 @@ impl Host {
     /// What the session last said about `hash`.
     pub fn seen(&self, hash: &str) -> Option<Seen> {
         self.inner.seen.lock().ok()?.get(hash).cloned()
+    }
+
+    /// What the session last said about `hash`, for a test that needs an answer without a
+    /// session running.
+    #[cfg(test)]
+    pub(crate) fn say(&self, hash: &str, seen: Seen) {
+        if let Ok(mut map) = self.inner.seen.lock() {
+            map.insert(hash.to_owned(), seen);
+        }
     }
 
     /// Why the session couldn't start (a port it may not use, a disk that refused).

@@ -1428,14 +1428,21 @@ impl Progress {
             Status::Downloading if item.at_service().is_some() => {
                 item.at_service().unwrap_or_default()
             }
+            // An ed2k download whose Kad search found nobody: not connecting to anything, and a
+            // dead link says so rather than looking like a slow start.
+            // i18n: a download's status: an ed2k search found nobody sharing the file
+            Status::Downloading if item.ed2k.as_ref().is_some_and(|e| e.no_sources) => {
+                crate::i18n::t("No sources yet").to_owned()
+            }
             Status::Downloading => {
                 // A video (yt-dlp) has no engine connections: data arriving is the sign.
-                let receiving = snap.is_some_and(|s| {
-                    s.connections
-                        .iter()
-                        .any(|c| matches!(c.status, ConnStatus::Receiving))
-                }) || ((item.video.is_some() || item.torrent.is_some())
-                    && item.rate() > 0.0);
+                let receiving =
+                    snap.is_some_and(|s| {
+                        s.connections
+                            .iter()
+                            .any(|c| matches!(c.status, ConnStatus::Receiving))
+                    }) || ((item.video.is_some() || item.torrent.is_some() || item.ed2k.is_some())
+                        && item.rate() > 0.0);
                 // Every byte in and none on its way (#736): the last of it written out, the
                 // file named; nothing is connecting.
                 let completing = item.torrent.is_none()

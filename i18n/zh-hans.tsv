@@ -8712,3 +8712,7 @@ unit	{n} MB	{n} MB
 #. {n} = a number (keep the braces as they are)
 #, machine
 unit	{n} MB/sec	{n} MB/秒
+#. text in a download's progress window
+	No sources yet	还没有源
+#. event log entry: an ed2k search found nobody sharing the file
+	Nobody is sharing this file yet: the link may be dead.	还没有人共享这个文件：链接可能已经失效。

@@ -7657,13 +7657,43 @@ impl App {
     /// asked now). The bytes and the state reach the rows through `Item::poll`, from the same
     /// numbers.
     fn ed2k_tick(&mut self) {
+        let now = crate::clock::now().naive_local();
         for i in self.items.iter_mut() {
             let Some(spec) = i.ed2k.as_mut() else {
                 continue;
             };
-            if let Some(seen) = self.ed2k_host.seen(&spec.hash) {
-                spec.sources = seen.sources;
-                spec.peers = seen.peers;
+            let Some(seen) = self.ed2k_host.seen(&spec.hash) else {
+                continue;
+            };
+            let was = spec.sources;
+            spec.sources = seen.sources;
+            spec.peers = seen.peers;
+            if seen.sources > 0 {
+                spec.no_sources = false;
+                if seen.sources != was {
+                    // The torrents' line for the same moment: the peers are found, the file is
+                    // not moving yet.
+                    i.note(crate::i18n::tn(
+                        seen.sources as u64,
+                        "Found {n} peer, connecting...",
+                        "Found {n} peers, connecting...",
+                    ));
+                }
+                continue;
+            }
+            // A search that has found nobody is not "connecting": a while into the download, the
+            // log and the status say so, once, instead of waiting silently on a link nobody holds.
+            let waited = i
+                .last_try
+                .as_deref()
+                .and_then(model::stamp_time)
+                .is_some_and(|at| (now - at).num_seconds() >= 30);
+            if !spec.no_sources && i.status == Status::Downloading && waited {
+                spec.no_sources = true;
+                // i18n: event log entry: an ed2k search found nobody sharing the file
+                i.note(crate::i18n::t(
+                    "Nobody is sharing this file yet: the link may be dead.",
+                ));
             }
         }
     }
@@ -8556,7 +8586,15 @@ impl App {
         };
         // Later: in the queue chosen, else the main queue; else started now.
         let queue = cmd.later.then(|| queue.unwrap_or(0));
-        let text = cmd.url.clone().unwrap_or_default();
+        // A `thunder://`, `flashget://` or `qqdl://` link is the address wrapped in it (#1782),
+        // as a typed one is: the checks below read that address, not the wrapper.
+        let text = match crate::transfer::unwrapped(cmd.url.as_deref().unwrap_or_default()) {
+            crate::transfer::Wrapped::Address(inner) => inner,
+            _ => cmd.url.clone().unwrap_or_default(),
+        };
+        if cmd.url.is_some() {
+            cmd.url = Some(text.clone());
+        }
         let torrent = match cmd.torrent_file.take() {
             Some(bytes) => Some((mdm_torrent::Source::File(bytes), false)),
             None => mdm_torrent::Source::magnet(text.trim()).map(|m| (m, true)),
@@ -15512,6 +15550,11 @@ fn copied_address(text: String) -> Option<(String, url::Url)> {
         crate::transfer::Wrapped::Address(inner) => inner,
         crate::transfer::Wrapped::Unsupported => return None,
     };
+    // An ed2k link is no URL (`|` is a forbidden character in one), so it gets the address the
+    // app holds it by, as a typed one does (`model::parse_address`).
+    if let Ok(link) = mdm_ed2k::parse(&text) {
+        return Some((text, crate::ed2k::address(&link)));
+    }
     let url = url::Url::parse(&text).ok()?;
     Some((text, url))
 }
@@ -15540,7 +15583,18 @@ mod copied_address_tests {
             let (text, url) = copied_address(wrapped.clone()).expect(&wrapped);
             assert_eq!((text.as_str(), url.as_str()), (plain, plain), "{wrapped}");
         }
+        // The case M16 added: a thunder:// link wrapping an ed2k link is the ed2k address inside.
+        let ed2k = "ed2k://|file|a.iso|1034384725|e3964138f86625da75103e53aa0af1a1|/";
+        let (text, url) = copied_address(format!("thunder://{}", b64(&format!("AA{ed2k}ZZ"))))
+            .expect("a wrapped ed2k link");
+        assert_eq!(text, ed2k, "stored as the link inside");
+        assert_eq!(
+            url.as_str(),
+            "ed2k://file/e3964138f86625da75103e53aa0af1a1/1034384725?name=a.iso",
+            "held by the address the app gives an ed2k link"
+        );
         for not in [
+            // An ed2k link whose hash is not one (16 bytes of hex) is no file.
             format!("thunder://{}", b64("AAed2k://|file|a.iso|1|0|/ZZ")),
             format!("qqdl://{}", b64("file:///C:/x.zip")),
             format!("thunder://{}", b64(plain)),
@@ -17020,6 +17074,103 @@ mod mark_hook_tests {
             item.log.iter().any(|(_, line)| line.contains(
                 "ed2k://|file|Some Film (2024).mp4|1034384725|e3964138f86625da75103e53aa0af1a1|/"
             )),
+            "{:?}",
+            item.log.iter().map(|(_, line)| line).collect::<Vec<_>>()
+        );
+    }
+
+    /// A `thunder://` link a paired device, the automation API or the command line sends is the
+    /// ed2k link inside it (#1782 with M16): added as that link, not refused as an address MDM
+    /// doesn't download.
+    #[test]
+    fn a_wrapped_ed2k_link_sent_to_the_api_is_added() {
+        use base64::Engine as _;
+        let b64 = |s: &str| base64::engine::general_purpose::STANDARD.encode(s);
+        let ed2k =
+            "ed2k://|file|Some Film (2024).mp4|1034384725|e3964138f86625da75103e53aa0af1a1|/";
+        let mut app = app();
+        let answer = app.remote_add(ipc::Command {
+            url: Some(format!("thunder://{}", b64(&format!("AA{ed2k}ZZ")))),
+            later: true,
+            ..Default::default()
+        });
+        assert!(!answer.contains("unsupported"), "{answer}");
+        let item = app.items.last().expect("the download");
+        assert_eq!(item.file_name, "Some Film (2024).mp4");
+        assert_eq!(item.size, Some(1_034_384_725));
+        assert_eq!(
+            item.ed2k.as_ref().expect("an ed2k download").hash,
+            "e3964138f86625da75103e53aa0af1a1"
+        );
+    }
+
+    /// An ed2k search that finds nobody is not a slow start: a while in, the log says the link may
+    /// be dead and the status stops reading "Connecting..."; both say it once. When sources turn
+    /// up, the log says how many and the status goes back to connecting.
+    #[test]
+    fn an_ed2k_link_nobody_shares_says_so_once() {
+        let mut app = app();
+        let url = crate::model::parse_address(
+            "ed2k://|file|Dead.mkv|1034384725|e3964138f86625da75103e53aa0af1a1|/",
+        )
+        .expect("an ed2k link");
+        let id = app.push_item(
+            url,
+            PathBuf::from("/downloads/Dead.mkv"),
+            Category::General,
+            String::new(),
+            None,
+            None,
+            Default::default(),
+            crate::i18n::t("with Add URL"),
+        );
+        let hash = app
+            .item(id)
+            .expect("the download")
+            .ed2k
+            .as_ref()
+            .unwrap()
+            .hash
+            .clone();
+        let said = |sources: usize| crate::ed2k::Seen {
+            downloaded: 0,
+            size: 1_034_384_725,
+            sources,
+            peers: 0,
+            state: mdm_ed2k::State::Running,
+            error: None,
+            path: None,
+        };
+        app.ed2k_host.say(&hash, said(0));
+        {
+            let item = app.item(id).expect("the download");
+            item.status = Status::Downloading;
+            item.last_try = Some(
+                (crate::clock::now().naive_local() - chrono::TimeDelta::seconds(31))
+                    .format("%b %d %H:%M:%S %Y")
+                    .to_string(),
+            );
+        }
+
+        app.ed2k_tick();
+        app.ed2k_tick();
+        let item = app.item(id).expect("the download");
+        assert!(item.ed2k.as_ref().unwrap().no_sources, "the status says it");
+        let lines: Vec<_> = item
+            .log
+            .iter()
+            .filter(|(_, line)| line.contains("Nobody is sharing"))
+            .collect();
+        assert_eq!(lines.len(), 1, "said once: {:?}", item.log);
+
+        app.ed2k_host.say(&hash, said(5));
+        app.ed2k_tick();
+        let item = app.item(id).expect("the download");
+        assert!(!item.ed2k.as_ref().unwrap().no_sources, "sources are back");
+        assert!(
+            item.log
+                .iter()
+                .any(|(_, line)| line.contains("Found 5 peers")),
             "{:?}",
             item.log.iter().map(|(_, line)| line).collect::<Vec<_>>()
         );

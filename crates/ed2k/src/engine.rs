@@ -77,6 +77,21 @@ struct Inner {
     stopped: AtomicBool,
 }
 
+/// The Kad key a file's sources are stored under is the file's hash exactly as the link writes
+/// it, but the Kad task of `rucio-emule` reverses each 4-byte word of the hash it is handed (what
+/// eMule does for a keyword's MD4, not for a file). Reversing the words here cancels that out:
+/// without it a source search looks under a key nothing is ever published under and every link
+/// finds 0 sources, while a publish of our own is still found (both sides being wrong alike).
+///
+/// Remove this when the Kad task stops reversing a file's hash.
+fn kad_key(hash: crate::Ed2kHash) -> crate::Ed2kHash {
+    let mut bytes = *hash.as_bytes();
+    for word in bytes.chunks_mut(4) {
+        word.reverse();
+    }
+    crate::Ed2kHash::from_bytes(bytes)
+}
+
 impl Ed2k {
     /// Start a session: its parts server first (so downloads can advertise the port), the Kad
     /// table when the first download needs it.
@@ -240,9 +255,39 @@ impl Ed2k {
         size: u64,
     ) -> Vec<rucio_emule::kad::search::KadSource> {
         match self.inner.kad().await {
-            Some(kad) => kad.search_sources(hash, size).await,
+            Some(kad) => kad.search_sources(kad_key(hash), size).await,
             None => Vec::new(),
         }
+    }
+
+    /// Share a file this installation already has: hash it, keep it for the peers that ask for
+    /// it, and publish it to Kad, so a link to it finds this machine. `Ok` is its ed2k hash — what
+    /// an `ed2k://` link to it carries.
+    pub async fn share(&self, path: std::path::PathBuf) -> Result<crate::Ed2kHash> {
+        let file = std::fs::File::open(&path)?;
+        let size = file.metadata()?.len();
+        let (hash, parts) = rucio_emule::ed2k::hash_reader_full(file)?;
+        let hashset = rucio_emule::ed2k::finalize_hashset(&parts, size, &hash);
+        let name = path
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        self.inner.served.write().await.insert(
+            *hash.as_bytes(),
+            UploadInfo {
+                name: name.clone(),
+                total_size: size,
+                num_slices: parts.len(),
+                path,
+                complete: true,
+                hashset,
+            },
+        );
+        if let Some(kad) = self.inner.kad().await {
+            let nodes = kad.publish_source(kad_key(hash), size).await;
+            tracing::info!(nodes, name = %name, "ed2k: shared, and published to Kad");
+        }
+        Ok(hash)
     }
 
     async fn get(&self, id: u64) -> Option<Arc<Download>> {
@@ -304,9 +349,7 @@ impl Inner {
         let handle = self
             .kad
             .get_or_try_init(|| async {
-                let socket = Arc::new(
-                    UdpSocket::bind((Ipv4Addr::UNSPECIFIED, self.settings.udp_port)).await?,
-                );
+                let socket = Arc::new(bind_udp(self.settings.udp_port).await?);
                 let kad = rucio_emule::kad::task::spawn(
                     socket,
                     KadId::random(),
@@ -347,6 +390,19 @@ async fn bind_tcp(port: u16) -> Result<TcpListener> {
     }
 }
 
+/// Kad's own port. A taken port (another eMule, a second MDM) is not the end of Kad: a free one
+/// works as well, since the port is told to the peers we talk to.
+async fn bind_udp(port: u16) -> Result<UdpSocket> {
+    match UdpSocket::bind((Ipv4Addr::UNSPECIFIED, port)).await {
+        Ok(socket) => Ok(socket),
+        Err(e) if port != 0 => {
+            tracing::info!(port, error = %e, "ed2k: Kad's port was taken, asking on a free one");
+            Ok(UdpSocket::bind((Ipv4Addr::UNSPECIFIED, 0)).await?)
+        }
+        Err(e) => Err(e.into()),
+    }
+}
+
 /// Keep one download going: refresh its sources, keep its workers busy, finish it.
 async fn supervise(inner: Arc<Inner>, download: Arc<Download>) {
     if download.running.swap(true, Ordering::AcqRel) {
@@ -380,7 +436,7 @@ async fn run_until_done(
             Some(query) => query(download.link.hash, download.link.size).await,
             None => match inner.kad().await {
                 Some(kad) => {
-                    kad.search_sources(download.link.hash, download.link.size)
+                    kad.search_sources(kad_key(download.link.hash), download.link.size)
                         .await
                 }
                 None => Vec::new(),
@@ -455,5 +511,161 @@ async fn sleep_unless_paused(download: &Arc<Download>, time: Duration) {
     tokio::select! {
         _ = tokio::time::sleep(time) => {}
         _ = download.changed.notified() => {}
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The key a file's sources are published and searched under, as the Kad task of
+    /// `rucio-emule` finally sees it (it reverses each word of what it is handed): the hash of the
+    /// link, byte for byte — the form eMule stores a file's sources under.
+    #[test]
+    fn the_source_key_is_the_hash_as_written() {
+        let hash = crate::Ed2kHash::from_hex("e3964138f86625da75103e53aa0af1a1").expect("hash");
+        let mut reversed = *kad_key(hash).as_bytes();
+        for word in reversed.chunks_mut(4) {
+            word.reverse();
+        }
+        assert_eq!(reversed, *hash.as_bytes());
+    }
+
+    /// The reversal is its own undo, so nothing else that holds a hash is affected.
+    #[test]
+    fn the_key_reversal_undoes_itself() {
+        let hash = crate::Ed2kHash::from_hex("0123456789abcdef0123456789abcdef").expect("hash");
+        assert_eq!(kad_key(kad_key(hash)), hash);
+        assert_ne!(kad_key(hash), hash);
+    }
+}
+
+#[cfg(test)]
+mod realnet {
+    use super::*;
+
+    /// One session shares a file, a second one joins Kad cold, and the search finds the first:
+    /// the publish, the key it is stored under, and the search that reads it back. Needs the Kad
+    /// network; run by hand:
+    /// `cargo test -p mdm-ed2k --lib -- --ignored --nocapture a_published_file`.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    #[ignore = "needs the Kad network"]
+    async fn a_published_file_is_found_from_a_cold_start() {
+        let _ = tracing_subscriber::fmt()
+            .with_env_filter(
+                tracing_subscriber::EnvFilter::try_from_default_env()
+                    .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
+            )
+            .with_test_writer()
+            .try_init();
+        let dir = std::env::temp_dir().join("mdm-ed2k-cold");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("dir");
+        let file = dir.join("published.bin");
+        let bytes: Vec<u8> = (0..12_000_000u32).map(|i| (i % 251) as u8).collect();
+        std::fs::write(&file, &bytes).expect("write");
+
+        let mut seed_settings = Settings::load(dir.join("seed-state"));
+        seed_settings.temp = dir.join("seed-parts");
+        seed_settings.seed = true;
+        let seed = Ed2k::start(seed_settings).await.expect("seed session");
+        join(&seed).await;
+        let hash = seed.share(file).await.expect("share");
+        println!("shared {hash} ({} B)", bytes.len());
+
+        let mut get_settings = Settings::load(dir.join("get-state"));
+        get_settings.temp = dir.join("get-parts");
+        get_settings.seed = false;
+        let get = Ed2k::start(get_settings).await.expect("get session");
+        join(&get).await;
+        let sources = get.sources(hash, bytes.len() as u64).await;
+        println!("cold search: {} source(s)", sources.len());
+        assert!(!sources.is_empty(), "the published source was not found");
+        get.stop().await;
+        seed.stop().await;
+    }
+
+    /// The parts server and the peer client over loopback: one session shares a file, the other
+    /// is told where it is and downloads it — hash set, part requests, the finished file. Needs
+    /// two ports of its own, nothing else; run by hand:
+    /// `cargo test -p mdm-ed2k --lib -- --ignored --nocapture a_file_comes_back`.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    #[ignore = "needs ports of its own, and nothing else"]
+    async fn a_file_comes_back_over_loopback() {
+        let _ = tracing_subscriber::fmt()
+            .with_env_filter(
+                tracing_subscriber::EnvFilter::try_from_default_env()
+                    .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
+            )
+            .with_test_writer()
+            .try_init();
+        let dir = std::env::temp_dir().join("mdm-ed2k-loop");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("dir");
+        let file = dir.join("published.bin");
+        let bytes: Vec<u8> = (0..12_000_000u32).map(|i| (i % 251) as u8).collect();
+        std::fs::write(&file, &bytes).expect("write");
+
+        let mut seed_settings = Settings::load(dir.join("seed-state"));
+        seed_settings.temp = dir.join("seed-parts");
+        seed_settings.seed = true;
+        let seed_user_hash = seed_settings.user_hash;
+        let seed = Ed2k::start(seed_settings).await.expect("seed session");
+        let hash = seed.share(file).await.expect("share");
+        let seed_port = seed.tcp_port();
+        println!("shared {hash} on port {seed_port}");
+
+        let mut get_settings = Settings::load(dir.join("get-state"));
+        get_settings.temp = dir.join("get-parts");
+        get_settings.seed = false;
+        get_settings.sources = Some(std::sync::Arc::new(
+            move |_hash: crate::Ed2kHash, _size: u64| {
+                Box::pin(async move {
+                    vec![rucio_emule::kad::search::KadSource {
+                        ip: std::net::Ipv4Addr::LOCALHOST,
+                        tcp_port: seed_port,
+                        udp_port: 0,
+                        user_hash: seed_user_hash,
+                    }]
+                })
+            },
+        ));
+        let get = Ed2k::start(get_settings).await.expect("get session");
+        let id = get
+            .add(Spec {
+                link: crate::Ed2kLink {
+                    name: "published.bin".to_owned(),
+                    size: bytes.len() as u64,
+                    hash,
+                },
+                dir: dir.join("out"),
+            })
+            .await
+            .expect("add");
+        for _ in 0..60 {
+            tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+            let st = get.stats_of(id).await.expect("stats");
+            if st.done_parts == st.parts {
+                break;
+            }
+        }
+        let got = std::fs::read(dir.join("out").join("published.bin")).expect("downloaded");
+        assert_eq!(got, bytes, "the file came back whole");
+        println!("downloaded and checked {} B", got.len());
+        get.stop().await;
+        seed.stop().await;
+    }
+
+    async fn join(engine: &Ed2k) {
+        let mut contacts = 0;
+        for _ in 0..90 {
+            contacts = engine.kad_contacts().await;
+            if contacts > 0 {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        }
+        println!("kad contacts: {contacts}");
+        assert!(contacts > 0, "Kad could not be joined");
     }
 }

@@ -35,7 +35,7 @@
 #. in a download's log: {n} is a number of files, {folder} where they went
 #. {n} = a number (keep the braces as they are)
 @plural	Extracted {n} file to {folder}|Extracted {n} files to {folder}	Extracted {n} file to {folder}|Extracted {n} files to {folder}
-#. count in the Add torrent window
+#. count in the main window; count in the Add torrent window
 #. while a magnet link's file list is fetched; {n} = peers found so far (none answered yet)
 #. {n} = a number (keep the braces as they are)
 #. the trailing ... means it is still going on: keep it
@@ -2790,6 +2790,8 @@
 	No proxy	No proxy
 #. text in the Options window
 	No proxy/socks	No proxy/socks
+#. text in a download's progress window
+	No sources yet	No sources yet
 #. text in the Options window
 #. Options → Accounts: no system keyring/keychain answered (none runs, e.g. a desktop without one), so the sign-ins stay in MDM's settings folder, which only the user's account may read
 	No system keyring answered, so sign-ins and passwords are kept in MDM's settings, which only you can read.	No system keyring answered, so sign-ins and passwords are kept in MDM's settings, which only you can read.
@@ -2806,6 +2808,9 @@
 	No video this can download on that page	No video this can download on that page
 #. message or event log entry in the main window
 	No web addresses were found in {file}.	No web addresses were found in {file}.
+#. message or event log entry in the main window
+#. event log entry: an ed2k search found nobody sharing the file
+	Nobody is sharing this file yet: the link may be dead.	Nobody is sharing this file yet: the link may be dead.
 #. text in helpers.rs
 #. helper name and what it does (Node.js and YouTube are names)
 	Node.js: unlocks YouTube's qualities	Node.js: unlocks YouTube's qualities
