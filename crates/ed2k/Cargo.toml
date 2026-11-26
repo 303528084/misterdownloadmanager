@@ -1,0 +1,33 @@
+[package]
+name = "mdm-ed2k"
+description = "eDonkey2000 (ed2k) downloads for Mister Download Manager: ed2k and Kad, with the eMule peer protocol (M16)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+# The wrapper links a download page may put an ed2k link in (thunder://, flashget://, qqdl://).
+base64.workspace = true
+# The eMule/Kad2 protocol layer: ed2k link parsing and MD4 hashing, the Kad2 packet codec and
+# source search, and the eMule peer TCP protocol (`deps` in the README, E-001). GPL-3.0-or-later,
+# as MDM is; zero coupling to the project it comes from (its own words: `rucio-emule` exposes a
+# clean async API and depends on nothing of its daemon).
+rucio-emule = { git = "https://github.com/ogarcia/rucio", rev = "6e9b7159b19bfa8c668b29ee28fdfa5a0867761b" }
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+url.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+tracing-subscriber.workspace = true
+
+[lints]
+workspace = true

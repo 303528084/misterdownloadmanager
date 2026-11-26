@@ -853,6 +853,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "blake3"
+version = "1.8.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6d9e454fc11f76977dc803893aff6304ed33d6a26efae8696573bea74baa27ae"
+dependencies = [
+ "arrayvec",
+ "cc",
+ "cfg-if",
+ "constant_time_eq 0.4.2",
+ "cpufeatures",
+]
+
+[[package]]
 name = "block-buffer"
 version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1436,6 +1449,12 @@ checksum = "9603f79528ece8163c496f8932121cb36cfe46259e9c907bb3d8205139d7caa3"
 dependencies = [
  "typewit",
 ]
+
+[[package]]
+name = "constant_time_eq"
+version = "0.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3d52eff69cd5e647efe296129160853a42795992097e8af39800e1060caeea9b"
 
 [[package]]
 name = "constant_time_eq"
@@ -4601,6 +4620,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "md4"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bd76fb0fd6b2e4be62a73f8e0858ca97f81babcb1af322dcaca196f735f17f80"
+dependencies = [
+ "digest",
+]
+
+[[package]]
 name = "mdm-app"
 version = "0.5.2"
 dependencies = [
@@ -4742,6 +4770,24 @@ dependencies = [
  "tempfile",
  "tokio",
  "tokio-util",
+ "tracing",
+ "tracing-subscriber",
+ "url",
+]
+
+[[package]]
+name = "mdm-ed2k"
+version = "0.5.2"
+dependencies = [
+ "anyhow",
+ "base64 0.23.1",
+ "reqwest 0.13.5",
+ "rucio-emule",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.21",
+ "tokio",
  "tracing",
  "tracing-subscriber",
  "url",
@@ -7310,6 +7356,24 @@ checksum = "cee271d0eeba64f0915b846cb7ae02e16faf3dfdffdca91731101d9d30fe3423"
 dependencies = [
  "bindgen",
  "cc",
+]
+
+[[package]]
+name = "rucio-emule"
+version = "0.51.0-dev"
+source = "git+https://github.com/ogarcia/rucio?rev=6e9b7159b19bfa8c668b29ee28fdfa5a0867761b#6e9b7159b19bfa8c668b29ee28fdfa5a0867761b"
+dependencies = [
+ "anyhow",
+ "blake3",
+ "flate2",
+ "hex",
+ "md-5",
+ "md4",
+ "serde",
+ "thiserror 2.0.21",
+ "tokio",
+ "tracing",
+ "urlencoding",
 ]
 
 [[package]]
@@ -10526,7 +10590,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "953a376f4930ed5af88e1e65948385f76866b45e7f75b21ac275327d0eeb9b46"
 dependencies = [
  "aes",
- "constant_time_eq",
+ "constant_time_eq 0.6.1",
  "crc32fast",
  "deflate64",
  "flate2",
